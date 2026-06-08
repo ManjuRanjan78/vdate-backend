@@ -1,0 +1,10 @@
+Facebook app Id  -->947018184827917
+
+app secret ---> 24f467576b99dc95b8656eb1c1d588e3
+
+couldinary api key : 239979386976485
+cloudinary api secret : ouzHcUtNtrqcfikFOkHDRzPaPuI
+
+cloud name : dl9bbmano
+
+https://res.cloudinary.com/dl9bbmano/image/upload/

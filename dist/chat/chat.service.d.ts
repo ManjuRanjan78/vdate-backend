@@ -1,0 +1,92 @@
+import { OnModuleInit } from '@nestjs/common';
+import { Model, Types } from 'mongoose';
+import { Repository } from 'typeorm';
+import { MessageTemplate } from './entities/message-template.entity';
+import { User } from '../users/users.entity';
+import { Friend } from '../friends/entities/friend.entity';
+import { Friendship } from '../friends/entities/friendship.entity';
+import { RedisService } from '../redis/redis.service';
+import { ChatRoom } from './schemas/chat-room.schema';
+import { ChatMessage } from './schemas/chat-message.schema';
+export declare class ChatService implements OnModuleInit {
+    private readonly chatRoomModel;
+    private readonly chatMessageModel;
+    private readonly templateRepo;
+    private readonly userRepo;
+    private readonly friendRepo;
+    private readonly friendshipRepo;
+    private readonly redisService;
+    constructor(chatRoomModel: Model<ChatRoom>, chatMessageModel: Model<ChatMessage>, templateRepo: Repository<MessageTemplate>, userRepo: Repository<User>, friendRepo: Repository<Friend>, friendshipRepo: Repository<Friendship>, redisService: RedisService);
+    onModuleInit(): Promise<void>;
+    getPredefinedMessages(): Promise<MessageTemplate[]>;
+    isMutualFriend(user1Id: number, user2Id: number): Promise<boolean>;
+    isMatchedPair(user1Id: number, user2Id: number): Promise<boolean>;
+    findRoomByPair(user1Id: number, user2Id: number): Promise<(import("mongoose").Document<unknown, {}, ChatRoom, {}, import("mongoose").DefaultSchemaOptions> & ChatRoom & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    } & {
+        id: string;
+    }) | null>;
+    getOrCreateChatRoom(user1Id: number, user2Id: number): Promise<import("mongoose").Document<unknown, {}, ChatRoom, {}, import("mongoose").DefaultSchemaOptions> & ChatRoom & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    } & {
+        id: string;
+    }>;
+    getChatRoomById(userId: number, roomId: string): Promise<(import("mongoose").Document<unknown, {}, ChatRoom, {}, import("mongoose").DefaultSchemaOptions> & ChatRoom & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    } & {
+        id: string;
+    }) | null>;
+    getChatRooms(userId: number): Promise<any[]>;
+    getUserName(userId: number): Promise<string>;
+    getMessages(userId: number, roomId: string): Promise<{
+        id: string;
+        roomId: string;
+        senderId: number;
+        receiverId: number;
+        predefinedMessageId: number | undefined;
+        text: string;
+        deliveredAt: Date;
+        readAt: Date;
+        createdAt: Date | undefined;
+        isSystem: boolean;
+        messageTemplate: string;
+    }[]>;
+    private getChatPolicyViolation;
+    private createSystemMessage;
+    getChatRoomByFriend(userId: number, friendId: number): Promise<(import("mongoose").Document<unknown, {}, ChatRoom, {}, import("mongoose").DefaultSchemaOptions> & ChatRoom & Required<{
+        _id: Types.ObjectId;
+    }> & {
+        __v: number;
+    } & {
+        id: string;
+    }) | null>;
+    sendChatMessage(senderId: number, body: {
+        roomId?: string;
+        receiverId?: number;
+        message?: string;
+        messageTemplateId?: number;
+        clientMessageId?: string;
+    }): Promise<{
+        id: string;
+        clientMessageId: string | undefined;
+        roomId: any;
+        senderId: number;
+        receiverId: any;
+        predefinedMessageId: number | undefined;
+        text: string;
+        deliveredAt: Date;
+        readAt: Date;
+        createdAt: Date | undefined;
+        isSystem: boolean;
+        roomCreated: boolean;
+    }>;
+    markAsRead(userId: number, roomId: string): Promise<void>;
+    private sendAutoResponse;
+    getUnreadBadgeCount(userId: number): Promise<number>;
+}
