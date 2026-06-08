@@ -1,23 +1,21 @@
 import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
 import { Repository, In } from 'typeorm';
 import { MessageTemplate } from './entities/message-template.entity';
 import { User } from '../users/users.entity';
 import { Friend, FriendStatus } from '../friends/entities/friend.entity';
 import { Friendship } from '../friends/entities/friendship.entity';
 import { RedisService } from '../redis/redis.service';
-import { ChatRoom } from './schemas/chat-room.schema';
-import { ChatMessage } from './schemas/chat-message.schema';
+import { ChatRoom } from './entities/chat-room.entity';
+import { ChatMessage } from './entities/chat-message.entity';
 
 @Injectable()
 export class ChatService implements OnModuleInit {
   constructor(
-    @InjectModel(ChatRoom.name)
-    private readonly chatRoomModel: Model<ChatRoom>,
-    @InjectModel(ChatMessage.name)
-    private readonly chatMessageModel: Model<ChatMessage>,
+    @InjectRepository(ChatRoom)
+    private readonly chatRoomRepo: Repository<ChatRoom>,
+    @InjectRepository(ChatMessage)
+    private readonly chatMessageRepo: Repository<ChatMessage>,
     @InjectRepository(MessageTemplate)
     private readonly templateRepo: Repository<MessageTemplate>,
     @InjectRepository(User)
@@ -57,7 +55,6 @@ export class ChatService implements OnModuleInit {
       ];
 
       const templates: MessageTemplate[] = [];
-      let responseIndex = 0;
 
       // First pass: create all messages
       for (const pair of predefinedPairs) {
@@ -77,12 +74,12 @@ export class ChatService implements OnModuleInit {
       });
 
       for (const pair of predefinedPairs) {
-        const messageTemplate = templateMap.get(pair.message);
+        const messageTemplateId = templateMap.get(pair.message);
         const autoResponseId = templateMap.get(pair.autoResponse);
 
-        if (messageTemplate && autoResponseId) {
+        if (messageTemplateId && autoResponseId) {
           await this.templateRepo.update(
-            { id: messageTemplate },
+            { id: messageTemplateId },
             { autoResponseId: autoResponseId },
           );
         }
@@ -128,8 +125,8 @@ export class ChatService implements OnModuleInit {
   async findRoomByPair(user1Id: number, user2Id: number) {
     const u1 = Number(user1Id);
     const u2 = Number(user2Id);
-    return this.chatRoomModel.findOne({
-      $or: [
+    return this.chatRoomRepo.findOne({
+      where: [
         { user1Id: u1, user2Id: u2 },
         { user1Id: u2, user2Id: u1 },
       ],
@@ -154,19 +151,21 @@ export class ChatService implements OnModuleInit {
       throw new BadRequestException('You can only start a chat with a matched user or a mutual friend.');
     }
 
-    const room = new this.chatRoomModel({
+    const room = this.chatRoomRepo.create({
       user1Id: u1,
       user2Id: u2,
     });
-    return await room.save();
+    return await this.chatRoomRepo.save(room);
   }
 
   async getChatRoomById(userId: number, roomId: string) {
-    if (!Types.ObjectId.isValid(roomId)) {
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(roomId)) {
       return null;
     }
 
-    const room = await this.chatRoomModel.findById(roomId);
+    const room = await this.chatRoomRepo.findOne({ where: { id: roomId } });
     if (!room) {
       return null;
     }
@@ -180,9 +179,13 @@ export class ChatService implements OnModuleInit {
 
   async getChatRooms(userId: number) {
     const uid = Number(userId);
-    const rooms = await this.chatRoomModel
-      .find({ $or: [{ user1Id: uid }, { user2Id: uid }] })
-      .sort({ updatedAt: -1 });
+    const rooms = await this.chatRoomRepo.find({
+      where: [
+        { user1Id: uid },
+        { user2Id: uid }
+      ],
+      order: { updatedAt: 'DESC' }
+    });
 
     const friendIds = rooms.map((room) => {
       const u1 = Number(room.user1Id);
@@ -203,14 +206,14 @@ export class ChatService implements OnModuleInit {
         continue;
       }
 
-      const unreadCount = await this.chatMessageModel.countDocuments({
-        roomId: room._id.toString(),
-        receiverId: userId,
-        $or: [{ readAt: null }, { readAt: { $exists: false } }],
+      const unreadCount = await this.chatMessageRepo.count({
+        where: [
+          { roomId: room.id, receiverId: userId, readAt: null as any }
+        ],
       });
 
       result.push({
-        roomId: room._id.toString(),
+        roomId: room.id,
         friendId,
         friendName: friend.name || friend.email || 'Unknown',
         friendImage: friend.imageUrl || '',
@@ -235,9 +238,10 @@ export class ChatService implements OnModuleInit {
       throw new NotFoundException('Chat room not found');
     }
 
-    const messages = await this.chatMessageModel
-      .find({ roomId: room._id.toString() })
-      .sort({ createdAt: 1 });
+    const messages = await this.chatMessageRepo.find({
+      where: { roomId: room.id },
+      order: { createdAt: 'ASC' }
+    });
 
     const templates = await this.templateRepo.find();
     const templateMap = new Map(templates.map((template) => [template.id, template.message]));
@@ -248,7 +252,7 @@ export class ChatService implements OnModuleInit {
         : undefined;
 
       return {
-        id: message._id.toString(),
+        id: message.id,
         roomId: message.roomId,
         senderId: message.senderId,
         receiverId: message.receiverId,
@@ -293,9 +297,9 @@ export class ChatService implements OnModuleInit {
     return undefined;
   }
 
-  private async createSystemMessage(senderId: number, room: any, text: string) {
-    const systemMessage = new this.chatMessageModel({
-      roomId: room._id.toString(),
+  private async createSystemMessage(senderId: number, room: ChatRoom, text: string) {
+    const systemMessage = this.chatMessageRepo.create({
+      roomId: room.id,
       senderId,
       receiverId: senderId,
       text,
@@ -304,8 +308,7 @@ export class ChatService implements OnModuleInit {
       isSystem: true,
     });
 
-    await systemMessage.save();
-    return systemMessage;
+    return await this.chatMessageRepo.save(systemMessage);
   }
 
   async getChatRoomByFriend(userId: number, friendId: number) {
@@ -323,6 +326,8 @@ export class ChatService implements OnModuleInit {
     },
   ) {
     let room: any = null;
+    let isNewRoom = false;
+    
     if (body.roomId != null && body.roomId.trim().length > 0) {
       room = await this.getChatRoomById(senderId, body.roomId);
       if (!room) {
@@ -335,6 +340,8 @@ export class ChatService implements OnModuleInit {
       if (receiverId == null) {
         throw new BadRequestException('receiverId is required when roomId is not provided.');
       }
+      const existingRoom = await this.findRoomByPair(senderId, receiverId);
+      isNewRoom = !existingRoom;
       room = await this.getOrCreateChatRoom(senderId, receiverId);
     }
 
@@ -348,9 +355,9 @@ export class ChatService implements OnModuleInit {
       if (policyMessage) {
         const systemMessage = await this.createSystemMessage(senderId, room, policyMessage);
         return {
-          id: systemMessage._id.toString(),
+          id: systemMessage.id,
           clientMessageId: body.clientMessageId,
-          roomId: room._id.toString(),
+          roomId: room.id,
           senderId,
           receiverId: senderId,
           predefinedMessageId: systemMessage.predefinedMessageId,
@@ -359,7 +366,7 @@ export class ChatService implements OnModuleInit {
           readAt: systemMessage.readAt,
           createdAt: systemMessage.createdAt,
           isSystem: true,
-          roomCreated: room.isNew === false ? false : true,
+          roomCreated: isNewRoom,
         };
       }
       text = trimmedMessage;
@@ -374,19 +381,19 @@ export class ChatService implements OnModuleInit {
       throw new BadRequestException('Either message or messageTemplateId is required.');
     }
 
-    const chatMessage = new this.chatMessageModel({
-      roomId: room._id.toString(),
+    const chatMessage = this.chatMessageRepo.create({
+      roomId: room.id,
       senderId,
       receiverId,
       predefinedMessageId,
       text,
       deliveredAt: new Date(),
     });
-    await chatMessage.save();
+    const savedChatMessage = await this.chatMessageRepo.save(chatMessage);
 
     room.lastMessage = text;
-    room.lastMessageAt = chatMessage.createdAt;
-    await room.save();
+    room.lastMessageAt = savedChatMessage.createdAt;
+    await this.chatRoomRepo.save(room);
 
     if (predefinedMessageId != null) {
       const template = await this.templateRepo.findOne({ where: { id: predefinedMessageId, isActive: true } });
@@ -394,7 +401,7 @@ export class ChatService implements OnModuleInit {
         const delayMs = 3000 + Math.random() * 2000;
         setTimeout(async () => {
           try {
-            await this.sendAutoResponse(room._id.toString(), senderId, receiverId, template.autoResponseId);
+            await this.sendAutoResponse(room.id, senderId, receiverId, template.autoResponseId);
           } catch (error) {
             console.error('Auto-response failed:', error);
           }
@@ -403,18 +410,18 @@ export class ChatService implements OnModuleInit {
     }
 
     return {
-      id: chatMessage._id.toString(),
+      id: savedChatMessage.id,
       clientMessageId: body.clientMessageId,
-      roomId: room._id.toString(),
+      roomId: room.id,
       senderId,
       receiverId,
-      predefinedMessageId: chatMessage.predefinedMessageId,
-      text: chatMessage.text,
-      deliveredAt: chatMessage.deliveredAt,
-      readAt: chatMessage.readAt,
-      createdAt: chatMessage.createdAt,
+      predefinedMessageId: savedChatMessage.predefinedMessageId,
+      text: savedChatMessage.text,
+      deliveredAt: savedChatMessage.deliveredAt,
+      readAt: savedChatMessage.readAt,
+      createdAt: savedChatMessage.createdAt,
       isSystem: false,
-      roomCreated: room.isNew === false ? false : true,
+      roomCreated: isNewRoom,
     };
   }
 
@@ -424,11 +431,11 @@ export class ChatService implements OnModuleInit {
       return;
     }
 
-    await this.chatMessageModel.updateMany(
+    await this.chatMessageRepo.update(
       {
-        roomId: room._id.toString(),
+        roomId: room.id,
         receiverId: userId,
-        $or: [{ readAt: null }, { readAt: { $exists: false } }],
+        readAt: null as any,
       },
       { readAt: new Date() },
     );
@@ -436,7 +443,7 @@ export class ChatService implements OnModuleInit {
 
   private async sendAutoResponse(roomId: string, originalSenderId: number, originalReceiverId: number, autoResponseTemplateId: number) {
     try {
-      const room = await this.chatRoomModel.findById(roomId);
+      const room = await this.chatRoomRepo.findOne({ where: { id: roomId } });
       if (!room) return;
 
       const autoTemplate = await this.templateRepo.findOne({
@@ -444,8 +451,7 @@ export class ChatService implements OnModuleInit {
       });
       if (!autoTemplate) return;
 
-      // Send response from originalReceiverId to originalSenderId
-      const autoMessage = new this.chatMessageModel({
+      const autoMessage = this.chatMessageRepo.create({
         roomId: roomId,
         senderId: originalReceiverId,
         receiverId: originalSenderId,
@@ -453,24 +459,24 @@ export class ChatService implements OnModuleInit {
         text: autoTemplate.message,
         isAutoResponse: true,
       });
-      await autoMessage.save();
+      const savedAutoMessage = await this.chatMessageRepo.save(autoMessage);
 
       room.lastMessage = autoTemplate.message;
-      room.lastMessageAt = autoMessage.createdAt;
-      await room.save();
+      room.lastMessageAt = savedAutoMessage.createdAt;
+      await this.chatRoomRepo.save(room);
 
       // Emit the auto-response to connected clients
       const socketService = require('../socket/socket.gateway');
       if (socketService && socketService.server) {
         socketService.server.emit('chat_message', {
-          id: autoMessage._id.toString(),
+          id: savedAutoMessage.id,
           roomId: roomId,
           senderId: originalReceiverId,
           receiverId: originalSenderId,
           predefinedMessageId: autoResponseTemplateId,
           text: autoTemplate.message,
-          readAt: autoMessage.readAt,
-          createdAt: autoMessage.createdAt,
+          readAt: savedAutoMessage.readAt,
+          createdAt: savedAutoMessage.createdAt,
           isAutoResponse: true,
         });
       }
@@ -480,9 +486,10 @@ export class ChatService implements OnModuleInit {
   }
 
   async getUnreadBadgeCount(userId: number) {
-    return this.chatMessageModel.countDocuments({
-      receiverId: userId,
-      $or: [{ readAt: null }, { readAt: { $exists: false } }],
+    return this.chatMessageRepo.count({
+      where: [
+        { receiverId: userId, readAt: null as any }
+      ],
     });
   }
 }

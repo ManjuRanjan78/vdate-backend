@@ -5,7 +5,7 @@ const { Client } = require('pg');
     host: 'localhost',
     port: 5432,
     user: 'postgres',
-    password: 'Najnar@420',
+    password: 'Ran2296@Admin',
     database: 'dating_app',
   });
 

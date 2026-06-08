@@ -1,25 +1,23 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Model } from 'mongoose';
-import { CallHistory, CallHistoryDocument } from './call-history.schema';
+import { CallHistory } from './call-history.entity';
 import { User } from '../users/users.entity';
 
 @Injectable()
 export class CallHistoryService {
   constructor(
-    @InjectModel(CallHistory.name)
-    private callHistoryModel: Model<CallHistoryDocument>,
+    @InjectRepository(CallHistory)
+    private callHistoryRepo: Repository<CallHistory>,
     @InjectRepository(User)
     private userRepo: Repository<User>,
   ) {}
 
-  async createCallRecord(data: Partial<CallHistory>) {
+  async createCallRecord(data: any) {
     try {
-      const record = new this.callHistoryModel({
-        callerId: data.callerId?.toString() || '',
-        receiverId: data.receiverId?.toString() || '',
+      const record = this.callHistoryRepo.create({
+        callerId: Number(data.callerId),
+        receiverId: Number(data.receiverId),
         roomName: data.roomName || '',
         callerName: data.callerName || '',
         receiverName: data.receiverName || '',
@@ -29,7 +27,7 @@ export class CallHistoryService {
         startedAt: data.startedAt || new Date(),
         endedAt: data.endedAt || null,
       });
-      const savedRecord = await record.save();
+      const savedRecord = await this.callHistoryRepo.save(record);
       return savedRecord;
     } catch (error) {
       console.error('Error creating call record:', error);
@@ -39,13 +37,13 @@ export class CallHistoryService {
 
   async endCallRecord(id: string, duration: number, status: string) {
     try {
-      const record = await this.callHistoryModel.findById(id);
+      const record = await this.callHistoryRepo.findOne({ where: { id } });
       if (!record) throw new NotFoundException('Call record not found');
       
       record.duration = duration;
       record.status = status;
       record.endedAt = new Date();
-      return await record.save();
+      return await this.callHistoryRepo.save(record);
     } catch (error) {
       console.error('Error ending call record:', error);
       throw error;
@@ -54,54 +52,50 @@ export class CallHistoryService {
 
   async getUserCallHistory(userId: string) {
     try {
-      const userIdStr = userId?.toString() || '';
-      const records = await this.callHistoryModel.find({
-        $or: [
-          { callerId: userIdStr },
-          { receiverId: userIdStr }
-        ]
-      })
-      .sort({ createdAt: -1 })
-      .lean();
+      const userIdNum = Number(userId);
+      const records = await this.callHistoryRepo.find({
+        where: [
+          { callerId: userIdNum },
+          { receiverId: userIdNum }
+        ],
+        order: { createdAt: 'DESC' }
+      });
 
-      const uniqueIds = new Set<string>();
+      const uniqueIds = new Set<number>();
       for (const record of records) {
         if (record.callerId) uniqueIds.add(record.callerId);
         if (record.receiverId) uniqueIds.add(record.receiverId);
       }
 
-      const idsToQuery = Array.from(uniqueIds)
-          .map((id) => Number(id))
-          .filter((value) => !isNaN(value));
-
+      const idsToQuery = Array.from(uniqueIds);
       const users = idsToQuery.length
           ? await this.userRepo.findByIds(idsToQuery)
           : [];
 
-      const userMap = new Map(users.map((user) => [user.id.toString(), user]));
+      const userMap = new Map(users.map((user) => [user.id, user]));
 
       return records.map((record) => {
-        const callerId = record.callerId || '';
-        const receiverId = record.receiverId || '';
-        const otherUserId = callerId === userIdStr ? receiverId : callerId;
+        const callerIdNum = record.callerId;
+        const receiverIdNum = record.receiverId;
+        const otherUserId = callerIdNum === userIdNum ? receiverIdNum : callerIdNum;
         const otherUser = userMap.get(otherUserId);
         const callerName = record.callerName || '';
         const receiverName = record.receiverName || '';
-        const otherUserName = callerId === userIdStr
-            ? receiverName || otherUser?.name || otherUser?.email || otherUserId
-            : callerName || otherUser?.name || otherUser?.email || otherUserId;
+        const otherUserName = callerIdNum === userIdNum
+            ? receiverName || otherUser?.name || otherUser?.email || otherUserId.toString()
+            : callerName || otherUser?.name || otherUser?.email || otherUserId.toString();
         const otherUserImage = otherUser?.imageUrl || '';
 
         return {
-          id: record._id?.toString() || '',
-          callId: record._id?.toString() || '',
-          callerId: record.callerId,
-          receiverId: record.receiverId,
+          id: record.id,
+          callId: record.id,
+          callerId: record.callerId.toString(),
+          receiverId: record.receiverId.toString(),
           callerName,
           receiverName,
           otherUserName,
           otherUserImage,
-          otherUserId,
+          otherUserId: otherUserId.toString(),
           roomName: record.roomName,
           callType: record.callType || 'VIDEO',
           duration: record.duration || 0,
@@ -119,7 +113,7 @@ export class CallHistoryService {
 
   async getCallRecordById(id: string) {
     try {
-      const record = await this.callHistoryModel.findById(id);
+      const record = await this.callHistoryRepo.findOne({ where: { id } });
       if (!record) throw new NotFoundException('Call record not found');
       return record;
     } catch (error) {
@@ -130,18 +124,18 @@ export class CallHistoryService {
 
   async endCallByCallId(callId: string, duration: number, status: string, callerId: string, receiverId: string) {
     try {
-      // Try to find by callId field if it exists, otherwise create or find by callerId+receiverId
-      let record = await this.callHistoryModel.findOne({
-        callerId: callerId?.toString() || '',
-        receiverId: receiverId?.toString() || '',
-        status: 'STARTED'
+      let record = await this.callHistoryRepo.findOne({
+        where: {
+          callerId: Number(callerId),
+          receiverId: Number(receiverId),
+          status: 'STARTED'
+        }
       });
 
       if (!record) {
-        // If not found, create a new record to close
-        record = new this.callHistoryModel({
-          callerId: callerId?.toString() || '',
-          receiverId: receiverId?.toString() || '',
+        record = this.callHistoryRepo.create({
+          callerId: Number(callerId),
+          receiverId: Number(receiverId),
           duration,
           status,
           endedAt: new Date(),
@@ -152,7 +146,7 @@ export class CallHistoryService {
         record.endedAt = new Date();
       }
 
-      return await record.save();
+      return await this.callHistoryRepo.save(record);
     } catch (error) {
       console.error('Error ending call by callId:', error);
       throw error;

@@ -162,9 +162,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return;
       }
 
-      await this.chatService.markAsRead(userId, room._id.toString());
+      await this.chatService.markAsRead(userId, room.id);
       const friendId = room.user1Id === userId ? room.user2Id : room.user1Id;
-      const roomId = room._id.toString();
+      const roomId = room.id;
 
       client.emit('chat_read', { roomId, userId });
       this.server.to(`chat_user_${friendId}`).emit('chat_read', { roomId, userId });
@@ -197,7 +197,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const friendId = room.user1Id === userId ? room.user2Id : room.user1Id;
-      const roomId = room._id.toString();
+      const roomId = room.id;
       this.server.to(`chat_user_${friendId}`).emit('chat_typing_started', {
         roomId,
         userId,
@@ -227,7 +227,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const friendId = room.user1Id === userId ? room.user2Id : room.user1Id;
-      const roomId = room._id.toString();
+      const roomId = room.id;
       this.server.to(`chat_user_${friendId}`).emit('chat_typing_stopped', {
         roomId,
         userId,

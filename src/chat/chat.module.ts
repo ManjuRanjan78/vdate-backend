@@ -1,11 +1,10 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { MongooseModule } from '@nestjs/mongoose';
 import { ChatService } from './chat.service';
 import { ChatController } from './chat.controller';
 import { ChatGateway } from './chat.gateway';
-import { ChatRoom, ChatRoomSchema } from './schemas/chat-room.schema';
-import { ChatMessage, ChatMessageSchema } from './schemas/chat-message.schema';
+import { ChatRoom } from './entities/chat-room.entity';
+import { ChatMessage } from './entities/chat-message.entity';
 import { User } from '../users/users.entity';
 import { MessageTemplate } from './entities/message-template.entity';
 import { Friend } from '../friends/entities/friend.entity';
@@ -14,11 +13,7 @@ import { FriendsModule } from '../friends/friends.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, MessageTemplate, Friend, Friendship]),
-    MongooseModule.forFeature([
-      { name: ChatRoom.name, schema: ChatRoomSchema },
-      { name: ChatMessage.name, schema: ChatMessageSchema },
-    ]),
+    TypeOrmModule.forFeature([User, MessageTemplate, Friend, Friendship, ChatRoom, ChatMessage]),
     forwardRef(() => FriendsModule),
   ],
   controllers: [ChatController],

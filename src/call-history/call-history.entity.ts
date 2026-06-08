@@ -10,8 +10,8 @@ export class CallHistory {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ unique: true })
-  callId!: string;
+  @Column({ unique: true, nullable: true })
+  callId?: string;
 
   @Column({ type: 'int' })
   callerId!: number;
@@ -20,7 +20,13 @@ export class CallHistory {
   receiverId!: number;
 
   @Column({ nullable: true })
-  roomName!: string;
+  roomName?: string;
+
+  @Column({ nullable: true })
+  callerName?: string;
+
+  @Column({ nullable: true })
+  receiverName?: string;
 
   @Column({ default: 'VIDEO' })
   callType!: string;

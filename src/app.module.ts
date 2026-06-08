@@ -5,7 +5,6 @@ import {
   RequestMethod,
 } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { MongooseModule } from '@nestjs/mongoose';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { AuthMiddleware } from './auth/auth.middleware';
@@ -32,7 +31,7 @@ import { CallHistoryModule } from './call-history/call-history.module';
       host: 'localhost',
       port: 5432,
       username: 'postgres',
-      password: 'Najnar@420',
+      password: 'Ran2296@Admin',
       database: 'dating_app',
       autoLoadEntities: true,
       // Use migrations in staging/production. Disable synchronize for safety.
@@ -43,7 +42,6 @@ import { CallHistoryModule } from './call-history/call-history.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
-    MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost/vdate'),
 
     AuthModule,
     UsersModule,

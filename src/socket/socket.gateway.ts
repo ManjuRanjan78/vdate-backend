@@ -893,37 +893,19 @@ async findMatch(
       );
 
     if (!matchedUser) {
+      console.log(`Matched user missing: ${matchedUserId}`);
 
-      console.log(
-        `Matched user missing: ${matchedUserId}`,
-      );
+      // Clean up invalid matched user
+      await this.redisService.del(`socket:${matchedUserId}`);
+      await this.redisService.del(`queue:${matchedUserId}`);
+      await this.matchService.removeFromQueue(matchedUserId, 'male');
+      await this.matchService.removeFromQueue(matchedUserId, 'female');
+      await this.redisService.clearMatched(matchedUserId);
+      await this.usersService.setUserOffline(matchedUserId);
+      await this.clearMatchingLocks(userId, matchedUserId);
 
-      await this.matchService.addToQueue(
-        userId,
-        gender,
-      );
-
-      await this.redisService.set(
-        `queue:${userId}`,
-        'true',
-        120,
-      );
-
-      await this.clearMatchingLocks(
-        userId,
-        matchedUserId,
-      );
-
-      client.emit(
-        'waiting',
-        {
-          success: true,
-          message:
-            'Matched user unavailable',
-        },
-      );
-
-      return;
+      // Retry matching
+      return this.findMatch(client, data);
     }
 
     // =========================
@@ -944,87 +926,25 @@ async findMatch(
     );
 
     // =========================
-    // SOCKET MISSING
-    // =========================
-
-    if (!matchedSocketId) {
-
-      console.log(
-        `Matched user socket missing`,
-      );
-
-      await this.matchService.addToQueue(
-        userId,
-        gender,
-      );
-
-      await this.redisService.set(
-        `queue:${userId}`,
-        'true',
-        120,
-      );
-
-      await this.clearMatchingLocks(
-        userId,
-        matchedUserId,
-      );
-
-      client.emit(
-        'waiting',
-        {
-          success: true,
-          message:
-            'Searching another user...',
-        },
-      );
-
-      return;
-    }
-
-    // =========================
     // VERIFY SOCKET IS ALIVE
     // =========================
 
-    const receiverSocket =
-      this.server.sockets.sockets.get(
-        matchedSocketId,
-      );
+    const receiverSocket = matchedSocketId ? this.server.sockets.sockets.get(matchedSocketId) : null;
 
-    if (
-  !receiverSocket ||
-  !receiverSocket.connected
-) {
+    if (!matchedSocketId || !receiverSocket || !receiverSocket.connected) {
+      console.log(`Matched user socket missing or dead: ${matchedUserId}`);
 
-      console.log(
-        `Receiver socket dead: ${matchedUserId}`,
-      );
+      // Clean up stale matched user
+      await this.redisService.del(`socket:${matchedUserId}`);
+      await this.redisService.del(`queue:${matchedUserId}`);
+      await this.matchService.removeFromQueue(matchedUserId, 'male');
+      await this.matchService.removeFromQueue(matchedUserId, 'female');
+      await this.redisService.clearMatched(matchedUserId);
+      await this.usersService.setUserOffline(matchedUserId);
+      await this.clearMatchingLocks(userId, matchedUserId);
 
-      await this.matchService.addToQueue(
-        userId,
-        gender,
-      );
-
-      await this.redisService.set(
-        `queue:${userId}`,
-        'true',
-        120,
-      );
-
-      await this.clearMatchingLocks(
-        userId,
-        matchedUserId,
-      );
-
-      client.emit(
-        'waiting',
-        {
-          success: true,
-          message:
-            'Matched user disconnected',
-        },
-      );
-
-      return;
+      // Retry matching
+      return this.findMatch(client, data);
     }
 
     // =========================
@@ -1260,8 +1180,7 @@ await Promise.all([
       'match_error',
       {
         success: false,
-        message:
-          'Failed to find match',
+        message: 'Failed to find match: ' + (error instanceof Error ? error.message : String(error)),
       },
     );
   }

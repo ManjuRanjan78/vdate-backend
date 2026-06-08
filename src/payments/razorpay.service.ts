@@ -8,8 +8,8 @@ export class RazorpayService {
   private client: any;
 
   constructor(private config: ConfigService) {
-    const keyId = this.config.get<string>('RAZORPAY_KEY_ID');
-    const keySecret = this.config.get<string>('RAZORPAY_KEY_SECRET');
+    const keyId = this.config.get<string>('RAZORPAY_KEY_ID') || 'mock_key_id';
+    const keySecret = this.config.get<string>('RAZORPAY_KEY_SECRET') || 'mock_key_secret';
 
     this.client = new Razorpay({
       key_id: keyId,

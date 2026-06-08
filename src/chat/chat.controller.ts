@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Req, UnauthorizedException, BadRequestException } from '@nestjs/common';
-import { Types } from 'mongoose';
+import { isUUID } from 'class-validator';
 import { ChatService } from './chat.service';
 
 @Controller('chat')
@@ -31,12 +31,12 @@ export class ChatController {
     if (!userId) throw new UnauthorizedException();
 
     let resolvedRoomId = roomId;
-    if (!Types.ObjectId.isValid(roomId)) {
+    if (!isUUID(roomId)) {
       const friendId = Number(roomId);
       if (!Number.isNaN(friendId)) {
         const room = await this.chatService.findRoomByPair(Number(userId), friendId);
         if (room) {
-          resolvedRoomId = room._id.toString();
+          resolvedRoomId = room.id;
         }
       }
     }
@@ -100,7 +100,7 @@ export class ChatController {
       if (!Number.isNaN(friendId)) {
         const room = await this.chatService.findRoomByPair(Number(userId), friendId);
         if (room) {
-          roomId = room._id.toString();
+          roomId = room.id;
         }
       }
     }

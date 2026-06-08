@@ -279,13 +279,6 @@ export class UsersService {
       return;
     }
 
-    // Females must explicitly click "Start Receiving Calls" to go online for calls,
-    // so we do not automatically mark them online or add them to the call pool here.
-    if (user.gender?.toLowerCase() === 'female') {
-      console.log(`[setUserOnline] Skipping auto online for female: ${user.id}`);
-      return;
-    }
-
     const id =
       String(user.id);
 
@@ -303,6 +296,17 @@ export class UsersService {
 
       await this.redisService.sadd(
         'online:male',
+        id,
+      );
+    }
+    
+    if (
+      user.gender?.toLowerCase() ===
+      'female'
+    ) {
+
+      await this.redisService.sadd(
+        'online:female',
         id,
       );
     }
@@ -674,7 +678,7 @@ export class UsersService {
     await this.redisService.sadd('online_users', id);
     const gender = user.gender?.toLowerCase();
     if (gender) {
-      await this.redisService.sadd(`online:${gender}`, id);
+      await this.redisService.sadd(`online_calls:${gender}`, id);
     }
 
     await this.userRepo.update(user.id, {
@@ -694,13 +698,11 @@ export class UsersService {
 
     const gender = user.gender?.toLowerCase();
     if (gender) {
-      await this.redisService.srem(`online:${gender}`, id);
+      await this.redisService.srem(`online_calls:${gender}`, id);
     }
 
-    await this.userRepo.update(user.id, {
-      isOnline: false,
-      lastActiveAt: new Date(),
-    });
+    // Notice we do NOT set isOnline: false in the DB here,
+    // because they might still be online for chat/swiping.
     console.log(`❌ User Offline for Calls: ${id}`);
   }
 }
