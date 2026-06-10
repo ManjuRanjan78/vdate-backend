@@ -67,7 +67,7 @@ export declare class SocketGateway implements OnGatewayConnection, OnGatewayDisc
         success: boolean;
         message?: undefined;
     }>;
-    findMatch(client: Socket, data: any): Promise<void>;
+    findMatch(client: Socket, data: any): any;
     startDirectCall(client: Socket, data: {
         receiverId: string;
     }): Promise<void>;
@@ -113,12 +113,18 @@ export declare class SocketGateway implements OnGatewayConnection, OnGatewayDisc
         success: boolean;
         token: string;
         livekitUrl: string | undefined;
+        liveStartedAt: Date | null | undefined;
+        liveLikes: number;
+        liveCoins: number;
         message?: undefined;
     } | {
         success: boolean;
         message: any;
         token?: undefined;
         livekitUrl?: undefined;
+        liveStartedAt?: undefined;
+        liveLikes?: undefined;
+        liveCoins?: undefined;
     }>;
     handleLeaveLive(client: Socket, data: {
         hostId: string;

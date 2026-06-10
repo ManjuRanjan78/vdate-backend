@@ -14,7 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatController = void 0;
 const common_1 = require("@nestjs/common");
-const mongoose_1 = require("mongoose");
+const class_validator_1 = require("class-validator");
 const chat_service_1 = require("./chat.service");
 let ChatController = class ChatController {
     chatService;
@@ -41,12 +41,12 @@ let ChatController = class ChatController {
         if (!userId)
             throw new common_1.UnauthorizedException();
         let resolvedRoomId = roomId;
-        if (!mongoose_1.Types.ObjectId.isValid(roomId)) {
+        if (!(0, class_validator_1.isUUID)(roomId)) {
             const friendId = Number(roomId);
             if (!Number.isNaN(friendId)) {
                 const room = await this.chatService.findRoomByPair(Number(userId), friendId);
                 if (room) {
-                    resolvedRoomId = room._id.toString();
+                    resolvedRoomId = room.id;
                 }
             }
         }
@@ -88,7 +88,7 @@ let ChatController = class ChatController {
             if (!Number.isNaN(friendId)) {
                 const room = await this.chatService.findRoomByPair(Number(userId), friendId);
                 if (room) {
-                    roomId = room._id.toString();
+                    roomId = room.id;
                 }
             }
         }

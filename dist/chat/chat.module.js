@@ -9,12 +9,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
-const mongoose_1 = require("@nestjs/mongoose");
 const chat_service_1 = require("./chat.service");
 const chat_controller_1 = require("./chat.controller");
 const chat_gateway_1 = require("./chat.gateway");
-const chat_room_schema_1 = require("./schemas/chat-room.schema");
-const chat_message_schema_1 = require("./schemas/chat-message.schema");
+const chat_room_entity_1 = require("./entities/chat-room.entity");
+const chat_message_entity_1 = require("./entities/chat-message.entity");
 const users_entity_1 = require("../users/users.entity");
 const message_template_entity_1 = require("./entities/message-template.entity");
 const friend_entity_1 = require("../friends/entities/friend.entity");
@@ -26,11 +25,7 @@ exports.ChatModule = ChatModule;
 exports.ChatModule = ChatModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([users_entity_1.User, message_template_entity_1.MessageTemplate, friend_entity_1.Friend, friendship_entity_1.Friendship]),
-            mongoose_1.MongooseModule.forFeature([
-                { name: chat_room_schema_1.ChatRoom.name, schema: chat_room_schema_1.ChatRoomSchema },
-                { name: chat_message_schema_1.ChatMessage.name, schema: chat_message_schema_1.ChatMessageSchema },
-            ]),
+            typeorm_1.TypeOrmModule.forFeature([users_entity_1.User, message_template_entity_1.MessageTemplate, friend_entity_1.Friend, friendship_entity_1.Friendship, chat_room_entity_1.ChatRoom, chat_message_entity_1.ChatMessage]),
             (0, common_1.forwardRef)(() => friends_module_1.FriendsModule),
         ],
         controllers: [chat_controller_1.ChatController],

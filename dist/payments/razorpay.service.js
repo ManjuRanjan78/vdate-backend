@@ -23,8 +23,8 @@ let RazorpayService = RazorpayService_1 = class RazorpayService {
     client;
     constructor(config) {
         this.config = config;
-        const keyId = this.config.get('RAZORPAY_KEY_ID');
-        const keySecret = this.config.get('RAZORPAY_KEY_SECRET');
+        const keyId = this.config.get('RAZORPAY_KEY_ID') || 'mock_key_id';
+        const keySecret = this.config.get('RAZORPAY_KEY_SECRET') || 'mock_key_secret';
         this.client = new razorpay_1.default({
             key_id: keyId,
             key_secret: keySecret,

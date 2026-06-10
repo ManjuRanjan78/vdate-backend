@@ -23,9 +23,9 @@ export declare class ChatGateway implements OnGatewayConnection, OnGatewayDiscon
         receiverId: any;
         predefinedMessageId: number | undefined;
         text: string;
-        deliveredAt: Date;
-        readAt: Date;
-        createdAt: Date | undefined;
+        deliveredAt: Date | undefined;
+        readAt: Date | undefined;
+        createdAt: Date;
         isSystem: boolean;
         roomCreated: boolean;
     } | undefined>;
@@ -43,9 +43,9 @@ export declare class ChatGateway implements OnGatewayConnection, OnGatewayDiscon
         receiverId: any;
         predefinedMessageId: number | undefined;
         text: string;
-        deliveredAt: Date;
-        readAt: Date;
-        createdAt: Date | undefined;
+        deliveredAt: Date | undefined;
+        readAt: Date | undefined;
+        createdAt: Date;
         isSystem: boolean;
         roomCreated: boolean;
     } | undefined>;
@@ -63,9 +63,9 @@ export declare class ChatGateway implements OnGatewayConnection, OnGatewayDiscon
         receiverId: any;
         predefinedMessageId: number | undefined;
         text: string;
-        deliveredAt: Date;
-        readAt: Date;
-        createdAt: Date | undefined;
+        deliveredAt: Date | undefined;
+        readAt: Date | undefined;
+        createdAt: Date;
         isSystem: boolean;
         roomCreated: boolean;
     } | undefined>;

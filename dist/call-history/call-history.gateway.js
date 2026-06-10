@@ -31,7 +31,7 @@ let CallHistoryGateway = class CallHistoryGateway {
                 status: 'STARTED',
                 startedAt: new Date(),
             });
-            client.emit('call_history_created', { id: record._id });
+            client.emit('call_history_created', { id: record.id });
             return record;
         }
         catch (error) {

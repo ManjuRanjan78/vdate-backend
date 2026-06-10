@@ -14,24 +14,22 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CallHistoryService = void 0;
 const common_1 = require("@nestjs/common");
-const mongoose_1 = require("@nestjs/mongoose");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
-const mongoose_2 = require("mongoose");
-const call_history_schema_1 = require("./call-history.schema");
+const call_history_entity_1 = require("./call-history.entity");
 const users_entity_1 = require("../users/users.entity");
 let CallHistoryService = class CallHistoryService {
-    callHistoryModel;
+    callHistoryRepo;
     userRepo;
-    constructor(callHistoryModel, userRepo) {
-        this.callHistoryModel = callHistoryModel;
+    constructor(callHistoryRepo, userRepo) {
+        this.callHistoryRepo = callHistoryRepo;
         this.userRepo = userRepo;
     }
     async createCallRecord(data) {
         try {
-            const record = new this.callHistoryModel({
-                callerId: data.callerId?.toString() || '',
-                receiverId: data.receiverId?.toString() || '',
+            const record = this.callHistoryRepo.create({
+                callerId: Number(data.callerId),
+                receiverId: Number(data.receiverId),
                 roomName: data.roomName || '',
                 callerName: data.callerName || '',
                 receiverName: data.receiverName || '',
@@ -41,7 +39,7 @@ let CallHistoryService = class CallHistoryService {
                 startedAt: data.startedAt || new Date(),
                 endedAt: data.endedAt || null,
             });
-            const savedRecord = await record.save();
+            const savedRecord = await this.callHistoryRepo.save(record);
             return savedRecord;
         }
         catch (error) {
@@ -51,13 +49,13 @@ let CallHistoryService = class CallHistoryService {
     }
     async endCallRecord(id, duration, status) {
         try {
-            const record = await this.callHistoryModel.findById(id);
+            const record = await this.callHistoryRepo.findOne({ where: { id } });
             if (!record)
                 throw new common_1.NotFoundException('Call record not found');
             record.duration = duration;
             record.status = status;
             record.endedAt = new Date();
-            return await record.save();
+            return await this.callHistoryRepo.save(record);
         }
         catch (error) {
             console.error('Error ending call record:', error);
@@ -66,15 +64,14 @@ let CallHistoryService = class CallHistoryService {
     }
     async getUserCallHistory(userId) {
         try {
-            const userIdStr = userId?.toString() || '';
-            const records = await this.callHistoryModel.find({
-                $or: [
-                    { callerId: userIdStr },
-                    { receiverId: userIdStr }
-                ]
-            })
-                .sort({ createdAt: -1 })
-                .lean();
+            const userIdNum = Number(userId);
+            const records = await this.callHistoryRepo.find({
+                where: [
+                    { callerId: userIdNum },
+                    { receiverId: userIdNum }
+                ],
+                order: { createdAt: 'DESC' }
+            });
             const uniqueIds = new Set();
             for (const record of records) {
                 if (record.callerId)
@@ -82,34 +79,32 @@ let CallHistoryService = class CallHistoryService {
                 if (record.receiverId)
                     uniqueIds.add(record.receiverId);
             }
-            const idsToQuery = Array.from(uniqueIds)
-                .map((id) => Number(id))
-                .filter((value) => !isNaN(value));
+            const idsToQuery = Array.from(uniqueIds);
             const users = idsToQuery.length
                 ? await this.userRepo.findByIds(idsToQuery)
                 : [];
-            const userMap = new Map(users.map((user) => [user.id.toString(), user]));
+            const userMap = new Map(users.map((user) => [user.id, user]));
             return records.map((record) => {
-                const callerId = record.callerId || '';
-                const receiverId = record.receiverId || '';
-                const otherUserId = callerId === userIdStr ? receiverId : callerId;
+                const callerIdNum = record.callerId;
+                const receiverIdNum = record.receiverId;
+                const otherUserId = callerIdNum === userIdNum ? receiverIdNum : callerIdNum;
                 const otherUser = userMap.get(otherUserId);
                 const callerName = record.callerName || '';
                 const receiverName = record.receiverName || '';
-                const otherUserName = callerId === userIdStr
-                    ? receiverName || otherUser?.name || otherUser?.email || otherUserId
-                    : callerName || otherUser?.name || otherUser?.email || otherUserId;
+                const otherUserName = callerIdNum === userIdNum
+                    ? receiverName || otherUser?.name || otherUser?.email || otherUserId.toString()
+                    : callerName || otherUser?.name || otherUser?.email || otherUserId.toString();
                 const otherUserImage = otherUser?.imageUrl || '';
                 return {
-                    id: record._id?.toString() || '',
-                    callId: record._id?.toString() || '',
-                    callerId: record.callerId,
-                    receiverId: record.receiverId,
+                    id: record.id,
+                    callId: record.id,
+                    callerId: record.callerId.toString(),
+                    receiverId: record.receiverId.toString(),
                     callerName,
                     receiverName,
                     otherUserName,
                     otherUserImage,
-                    otherUserId,
+                    otherUserId: otherUserId.toString(),
                     roomName: record.roomName,
                     callType: record.callType || 'VIDEO',
                     duration: record.duration || 0,
@@ -127,7 +122,7 @@ let CallHistoryService = class CallHistoryService {
     }
     async getCallRecordById(id) {
         try {
-            const record = await this.callHistoryModel.findById(id);
+            const record = await this.callHistoryRepo.findOne({ where: { id } });
             if (!record)
                 throw new common_1.NotFoundException('Call record not found');
             return record;
@@ -139,15 +134,17 @@ let CallHistoryService = class CallHistoryService {
     }
     async endCallByCallId(callId, duration, status, callerId, receiverId) {
         try {
-            let record = await this.callHistoryModel.findOne({
-                callerId: callerId?.toString() || '',
-                receiverId: receiverId?.toString() || '',
-                status: 'STARTED'
+            let record = await this.callHistoryRepo.findOne({
+                where: {
+                    callerId: Number(callerId),
+                    receiverId: Number(receiverId),
+                    status: 'STARTED'
+                }
             });
             if (!record) {
-                record = new this.callHistoryModel({
-                    callerId: callerId?.toString() || '',
-                    receiverId: receiverId?.toString() || '',
+                record = this.callHistoryRepo.create({
+                    callerId: Number(callerId),
+                    receiverId: Number(receiverId),
                     duration,
                     status,
                     endedAt: new Date(),
@@ -158,7 +155,7 @@ let CallHistoryService = class CallHistoryService {
                 record.status = status;
                 record.endedAt = new Date();
             }
-            return await record.save();
+            return await this.callHistoryRepo.save(record);
         }
         catch (error) {
             console.error('Error ending call by callId:', error);
@@ -169,9 +166,9 @@ let CallHistoryService = class CallHistoryService {
 exports.CallHistoryService = CallHistoryService;
 exports.CallHistoryService = CallHistoryService = __decorate([
     (0, common_1.Injectable)(),
-    __param(0, (0, mongoose_1.InjectModel)(call_history_schema_1.CallHistory.name)),
+    __param(0, (0, typeorm_1.InjectRepository)(call_history_entity_1.CallHistory)),
     __param(1, (0, typeorm_1.InjectRepository)(users_entity_1.User)),
-    __metadata("design:paramtypes", [mongoose_2.Model,
+    __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository])
 ], CallHistoryService);
 //# sourceMappingURL=call-history.service.js.map

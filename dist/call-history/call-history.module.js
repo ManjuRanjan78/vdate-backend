@@ -8,12 +8,11 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CallHistoryModule = void 0;
 const common_1 = require("@nestjs/common");
-const mongoose_1 = require("@nestjs/mongoose");
 const typeorm_1 = require("@nestjs/typeorm");
 const call_history_controller_1 = require("./call-history.controller");
 const call_history_service_1 = require("./call-history.service");
 const call_history_gateway_1 = require("./call-history.gateway");
-const call_history_schema_1 = require("./call-history.schema");
+const call_history_entity_1 = require("./call-history.entity");
 const users_entity_1 = require("../users/users.entity");
 let CallHistoryModule = class CallHistoryModule {
 };
@@ -21,8 +20,7 @@ exports.CallHistoryModule = CallHistoryModule;
 exports.CallHistoryModule = CallHistoryModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            mongoose_1.MongooseModule.forFeature([{ name: call_history_schema_1.CallHistory.name, schema: call_history_schema_1.CallHistorySchema }]),
-            typeorm_1.TypeOrmModule.forFeature([users_entity_1.User]),
+            typeorm_1.TypeOrmModule.forFeature([call_history_entity_1.CallHistory, users_entity_1.User]),
         ],
         controllers: [call_history_controller_1.CallHistoryController],
         providers: [call_history_service_1.CallHistoryService, call_history_gateway_1.CallHistoryGateway],

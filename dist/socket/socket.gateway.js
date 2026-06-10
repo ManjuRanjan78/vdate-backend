@@ -189,7 +189,13 @@ let SocketGateway = class SocketGateway {
                     console.log(`User offline after timeout: ${userId}`);
                     if (user.isLive) {
                         console.log(`Broadcaster ${userId} offline. Ending live stream.`);
-                        await this.usersService.updateUser(userId, { isLive: false, viewerCount: 0 });
+                        await this.usersService.updateUser(userId, {
+                            isLive: false,
+                            viewerCount: 0,
+                            liveStartedAt: null,
+                            liveLikes: 0,
+                            liveCoins: 0,
+                        });
                         this.server.to(`live_${userId}`).emit('live_ended', { hostId: userId });
                         this.server.emit('live_rooms_updated');
                     }
@@ -520,41 +526,29 @@ let SocketGateway = class SocketGateway {
             const matchedUser = await this.usersService.findById(matchedUserId);
             if (!matchedUser) {
                 console.log(`Matched user missing: ${matchedUserId}`);
-                await this.matchService.addToQueue(userId, gender);
-                await this.redisService.set(`queue:${userId}`, 'true', 120);
+                await this.redisService.del(`socket:${matchedUserId}`);
+                await this.redisService.del(`queue:${matchedUserId}`);
+                await this.matchService.removeFromQueue(matchedUserId, 'male');
+                await this.matchService.removeFromQueue(matchedUserId, 'female');
+                await this.redisService.clearMatched(matchedUserId);
+                await this.usersService.setUserOffline(matchedUserId);
                 await this.clearMatchingLocks(userId, matchedUserId);
-                client.emit('waiting', {
-                    success: true,
-                    message: 'Matched user unavailable',
-                });
-                return;
+                return this.findMatch(client, data);
             }
             const matchedSocketId = await this.redisService.get(`socket:${matchedUserId}`);
             console.log(`MATCH FOUND ${userId} ↔ ${matchedUserId}`);
             console.log(`Receiver socket: ${matchedSocketId}`);
-            if (!matchedSocketId) {
-                console.log(`Matched user socket missing`);
-                await this.matchService.addToQueue(userId, gender);
-                await this.redisService.set(`queue:${userId}`, 'true', 120);
+            const receiverSocket = matchedSocketId ? this.server.sockets.sockets.get(matchedSocketId) : null;
+            if (!matchedSocketId || !receiverSocket || !receiverSocket.connected) {
+                console.log(`Matched user socket missing or dead: ${matchedUserId}`);
+                await this.redisService.del(`socket:${matchedUserId}`);
+                await this.redisService.del(`queue:${matchedUserId}`);
+                await this.matchService.removeFromQueue(matchedUserId, 'male');
+                await this.matchService.removeFromQueue(matchedUserId, 'female');
+                await this.redisService.clearMatched(matchedUserId);
+                await this.usersService.setUserOffline(matchedUserId);
                 await this.clearMatchingLocks(userId, matchedUserId);
-                client.emit('waiting', {
-                    success: true,
-                    message: 'Searching another user...',
-                });
-                return;
-            }
-            const receiverSocket = this.server.sockets.sockets.get(matchedSocketId);
-            if (!receiverSocket ||
-                !receiverSocket.connected) {
-                console.log(`Receiver socket dead: ${matchedUserId}`);
-                await this.matchService.addToQueue(userId, gender);
-                await this.redisService.set(`queue:${userId}`, 'true', 120);
-                await this.clearMatchingLocks(userId, matchedUserId);
-                client.emit('waiting', {
-                    success: true,
-                    message: 'Matched user disconnected',
-                });
-                return;
+                return this.findMatch(client, data);
             }
             await this.matchService.removeFromQueue(userId, gender);
             await this.matchService.removeFromQueue(matchedUserId, matchedUser.gender);
@@ -636,7 +630,7 @@ let SocketGateway = class SocketGateway {
             }
             client.emit('match_error', {
                 success: false,
-                message: 'Failed to find match',
+                message: 'Failed to find match: ' + (error instanceof Error ? error.message : String(error)),
             });
         }
     }
@@ -878,6 +872,9 @@ let SocketGateway = class SocketGateway {
             await this.usersService.updateUser(hostId, {
                 isLive: true,
                 viewerCount: 0,
+                liveStartedAt: new Date(),
+                liveLikes: 0,
+                liveCoins: 0,
             });
             client.join(`live_${hostId}`);
             const roomName = `live_${hostId}`;
@@ -902,6 +899,9 @@ let SocketGateway = class SocketGateway {
             await this.usersService.updateUser(hostId, {
                 isLive: false,
                 viewerCount: 0,
+                liveStartedAt: null,
+                liveLikes: 0,
+                liveCoins: 0,
             });
             const roomName = `live_${hostId}`;
             this.server.to(roomName).emit('live_ended', { hostId });
@@ -943,6 +943,9 @@ let SocketGateway = class SocketGateway {
                 success: true,
                 token,
                 livekitUrl: process.env.LIVEKIT_URL,
+                liveStartedAt: host?.liveStartedAt,
+                liveLikes: host?.liveLikes || 0,
+                liveCoins: host?.liveCoins || 0,
             };
         }
         catch (e) {
@@ -995,6 +998,11 @@ let SocketGateway = class SocketGateway {
         try {
             const { hostId, userId } = data;
             const roomName = `live_${hostId}`;
+            const host = await this.usersService.findById(hostId);
+            if (host) {
+                const newLikes = (host.liveLikes || 0) + 1;
+                await this.usersService.updateUser(hostId, { liveLikes: newLikes });
+            }
             this.server.to(roomName).emit('live_like_received', {
                 userId,
             });
@@ -1019,6 +1027,11 @@ let SocketGateway = class SocketGateway {
             }
             const senderNewCoins = await this.usersService.updateCoins(fromUserId, -giftCoins);
             const receiverNewCoins = await this.usersService.updateCoins(hostId, giftCoins);
+            const host = await this.usersService.findById(hostId);
+            if (host) {
+                const newLiveCoins = (host.liveCoins || 0) + giftCoins;
+                await this.usersService.updateUser(hostId, { liveCoins: newLiveCoins });
+            }
             this.server.to(roomName).emit('live_gift_received', {
                 senderId: fromUserId,
                 senderName: sender.name || 'Someone',

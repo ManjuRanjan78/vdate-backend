@@ -1,47 +1,28 @@
 import { OnModuleInit } from '@nestjs/common';
-import { Model, Types } from 'mongoose';
 import { Repository } from 'typeorm';
 import { MessageTemplate } from './entities/message-template.entity';
 import { User } from '../users/users.entity';
 import { Friend } from '../friends/entities/friend.entity';
 import { Friendship } from '../friends/entities/friendship.entity';
 import { RedisService } from '../redis/redis.service';
-import { ChatRoom } from './schemas/chat-room.schema';
-import { ChatMessage } from './schemas/chat-message.schema';
+import { ChatRoom } from './entities/chat-room.entity';
+import { ChatMessage } from './entities/chat-message.entity';
 export declare class ChatService implements OnModuleInit {
-    private readonly chatRoomModel;
-    private readonly chatMessageModel;
+    private readonly chatRoomRepo;
+    private readonly chatMessageRepo;
     private readonly templateRepo;
     private readonly userRepo;
     private readonly friendRepo;
     private readonly friendshipRepo;
     private readonly redisService;
-    constructor(chatRoomModel: Model<ChatRoom>, chatMessageModel: Model<ChatMessage>, templateRepo: Repository<MessageTemplate>, userRepo: Repository<User>, friendRepo: Repository<Friend>, friendshipRepo: Repository<Friendship>, redisService: RedisService);
+    constructor(chatRoomRepo: Repository<ChatRoom>, chatMessageRepo: Repository<ChatMessage>, templateRepo: Repository<MessageTemplate>, userRepo: Repository<User>, friendRepo: Repository<Friend>, friendshipRepo: Repository<Friendship>, redisService: RedisService);
     onModuleInit(): Promise<void>;
     getPredefinedMessages(): Promise<MessageTemplate[]>;
     isMutualFriend(user1Id: number, user2Id: number): Promise<boolean>;
     isMatchedPair(user1Id: number, user2Id: number): Promise<boolean>;
-    findRoomByPair(user1Id: number, user2Id: number): Promise<(import("mongoose").Document<unknown, {}, ChatRoom, {}, import("mongoose").DefaultSchemaOptions> & ChatRoom & Required<{
-        _id: Types.ObjectId;
-    }> & {
-        __v: number;
-    } & {
-        id: string;
-    }) | null>;
-    getOrCreateChatRoom(user1Id: number, user2Id: number): Promise<import("mongoose").Document<unknown, {}, ChatRoom, {}, import("mongoose").DefaultSchemaOptions> & ChatRoom & Required<{
-        _id: Types.ObjectId;
-    }> & {
-        __v: number;
-    } & {
-        id: string;
-    }>;
-    getChatRoomById(userId: number, roomId: string): Promise<(import("mongoose").Document<unknown, {}, ChatRoom, {}, import("mongoose").DefaultSchemaOptions> & ChatRoom & Required<{
-        _id: Types.ObjectId;
-    }> & {
-        __v: number;
-    } & {
-        id: string;
-    }) | null>;
+    findRoomByPair(user1Id: number, user2Id: number): Promise<ChatRoom | null>;
+    getOrCreateChatRoom(user1Id: number, user2Id: number): Promise<ChatRoom>;
+    getChatRoomById(userId: number, roomId: string): Promise<ChatRoom | null>;
     getChatRooms(userId: number): Promise<any[]>;
     getUserName(userId: number): Promise<string>;
     getMessages(userId: number, roomId: string): Promise<{
@@ -51,21 +32,15 @@ export declare class ChatService implements OnModuleInit {
         receiverId: number;
         predefinedMessageId: number | undefined;
         text: string;
-        deliveredAt: Date;
-        readAt: Date;
-        createdAt: Date | undefined;
+        deliveredAt: Date | undefined;
+        readAt: Date | undefined;
+        createdAt: Date;
         isSystem: boolean;
         messageTemplate: string;
     }[]>;
     private getChatPolicyViolation;
     private createSystemMessage;
-    getChatRoomByFriend(userId: number, friendId: number): Promise<(import("mongoose").Document<unknown, {}, ChatRoom, {}, import("mongoose").DefaultSchemaOptions> & ChatRoom & Required<{
-        _id: Types.ObjectId;
-    }> & {
-        __v: number;
-    } & {
-        id: string;
-    }) | null>;
+    getChatRoomByFriend(userId: number, friendId: number): Promise<ChatRoom | null>;
     sendChatMessage(senderId: number, body: {
         roomId?: string;
         receiverId?: number;
@@ -80,9 +55,9 @@ export declare class ChatService implements OnModuleInit {
         receiverId: any;
         predefinedMessageId: number | undefined;
         text: string;
-        deliveredAt: Date;
-        readAt: Date;
-        createdAt: Date | undefined;
+        deliveredAt: Date | undefined;
+        readAt: Date | undefined;
+        createdAt: Date;
         isSystem: boolean;
         roomCreated: boolean;
     }>;

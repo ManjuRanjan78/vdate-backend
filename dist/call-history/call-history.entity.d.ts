@@ -1,9 +1,11 @@
 export declare class CallHistory {
     id: string;
-    callId: string;
+    callId?: string;
     callerId: number;
     receiverId: number;
-    roomName: string;
+    roomName?: string;
+    callerName?: string;
+    receiverName?: string;
     callType: string;
     duration?: number;
     status: string;

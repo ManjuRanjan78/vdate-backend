@@ -485,7 +485,13 @@ if (
     // =========================
     if (user.isLive) {
       console.log(`Broadcaster ${userId} offline. Ending live stream.`);
-      await this.usersService.updateUser(userId, { isLive: false, viewerCount: 0 });
+      await this.usersService.updateUser(userId, {
+        isLive: false,
+        viewerCount: 0,
+        liveStartedAt: null,
+        liveLikes: 0,
+        liveCoins: 0,
+      });
       this.server.to(`live_${userId}`).emit('live_ended', { hostId: userId });
       this.server.emit('live_rooms_updated');
     }
@@ -2233,6 +2239,9 @@ async handleLeaveQueue(
       await this.usersService.updateUser(hostId, {
         isLive: true,
         viewerCount: 0,
+        liveStartedAt: new Date(),
+        liveLikes: 0,
+        liveCoins: 0,
       });
 
       client.join(`live_${hostId}`);
@@ -2267,6 +2276,9 @@ async handleLeaveQueue(
       await this.usersService.updateUser(hostId, {
         isLive: false,
         viewerCount: 0,
+        liveStartedAt: null,
+        liveLikes: 0,
+        liveCoins: 0,
       });
 
       const roomName = `live_${hostId}`;
@@ -2327,6 +2339,9 @@ async handleLeaveQueue(
         success: true,
         token,
         livekitUrl: process.env.LIVEKIT_URL,
+        liveStartedAt: host?.liveStartedAt,
+        liveLikes: host?.liveLikes || 0,
+        liveCoins: host?.liveCoins || 0,
       };
     } catch (e: any) {
       console.error('Join live error:', e);
@@ -2398,6 +2413,12 @@ async handleLeaveQueue(
       const { hostId, userId } = data;
       const roomName = `live_${hostId}`;
 
+      const host = await this.usersService.findById(hostId);
+      if (host) {
+        const newLikes = (host.liveLikes || 0) + 1;
+        await this.usersService.updateUser(hostId, { liveLikes: newLikes });
+      }
+
       this.server.to(roomName).emit('live_like_received', {
         userId,
       });
@@ -2432,6 +2453,13 @@ async handleLeaveQueue(
       // Perform transfer
       const senderNewCoins = await this.usersService.updateCoins(fromUserId, -giftCoins);
       const receiverNewCoins = await this.usersService.updateCoins(hostId, giftCoins);
+
+      // Increment liveCoins of host
+      const host = await this.usersService.findById(hostId);
+      if (host) {
+        const newLiveCoins = (host.liveCoins || 0) + giftCoins;
+        await this.usersService.updateUser(hostId, { liveCoins: newLiveCoins });
+      }
 
       // Notify room of gift
       this.server.to(roomName).emit('live_gift_received', {

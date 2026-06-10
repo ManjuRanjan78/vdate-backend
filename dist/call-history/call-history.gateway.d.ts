@@ -8,13 +8,7 @@ export declare class CallHistoryGateway {
         receiverId: string;
         roomName?: string;
         callType?: string;
-    }): Promise<(import("mongoose").Document<unknown, {}, import("./call-history.schema").CallHistoryDocument, {}, import("mongoose").DefaultSchemaOptions> & import("./call-history.schema").CallHistory & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
-        _id: import("mongoose").Types.ObjectId;
-    }> & {
-        __v: number;
-    } & {
-        id: string;
-    }) | undefined>;
+    }): Promise<import("./call-history.entity").CallHistory | undefined>;
     handleCallEnded(client: Socket, data: {
         id: string;
         duration: number;
