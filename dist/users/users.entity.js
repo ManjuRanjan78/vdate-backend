@@ -41,6 +41,9 @@ let User = class User {
     isVerified;
     isOnline;
     isLive;
+    liveStartedAt;
+    liveLikes;
+    liveCoins;
     isActive;
     hostApproved;
     role;
@@ -196,6 +199,25 @@ __decorate([
     }),
     __metadata("design:type", Boolean)
 ], User.prototype, "isLive", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'timestamp',
+        nullable: true,
+    }),
+    __metadata("design:type", Object)
+], User.prototype, "liveStartedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        default: 0,
+    }),
+    __metadata("design:type", Number)
+], User.prototype, "liveLikes", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        default: 0,
+    }),
+    __metadata("design:type", Number)
+], User.prototype, "liveCoins", void 0);
 __decorate([
     (0, typeorm_1.Column)({
         default: true,

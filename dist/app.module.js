@@ -9,7 +9,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
-const mongoose_1 = require("@nestjs/mongoose");
 const auth_module_1 = require("./auth/auth.module");
 const config_1 = require("@nestjs/config");
 const auth_middleware_1 = require("./auth/auth.middleware");
@@ -28,6 +27,8 @@ const firebase_module_1 = require("./firebase/firebase.module");
 const notifications_module_1 = require("./notifications/notifications.module");
 const payments_module_1 = require("./payments/payments.module");
 const call_history_module_1 = require("./call-history/call-history.module");
+const posts_module_1 = require("./posts/posts.module");
+const reports_module_1 = require("./reports/reports.module");
 let AppModule = class AppModule {
     configure(consumer) {
         consumer
@@ -55,7 +56,6 @@ exports.AppModule = AppModule = __decorate([
             config_1.ConfigModule.forRoot({
                 isGlobal: true,
             }),
-            mongoose_1.MongooseModule.forRoot(process.env.MONGO_URI || 'mongodb://localhost/vdate'),
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
             balance_module_1.BalanceModule,
@@ -72,6 +72,8 @@ exports.AppModule = AppModule = __decorate([
             notifications_module_1.NotificationsModule,
             payments_module_1.PaymentsModule,
             call_history_module_1.CallHistoryModule,
+            posts_module_1.PostsModule,
+            reports_module_1.ReportsModule,
         ],
     })
 ], AppModule);

@@ -111,15 +111,15 @@ let UsersService = class UsersService {
         if (!user) {
             return;
         }
-        if (user.gender?.toLowerCase() === 'female') {
-            console.log(`[setUserOnline] Skipping auto online for female: ${user.id}`);
-            return;
-        }
         const id = String(user.id);
         await this.redisService.sadd('online_users', id);
         if (user.gender?.toLowerCase() ===
             'male') {
             await this.redisService.sadd('online:male', id);
+        }
+        if (user.gender?.toLowerCase() ===
+            'female') {
+            await this.redisService.sadd('online:female', id);
         }
         await this.userRepo.update(user.id, {
             isOnline: true,
@@ -222,6 +222,9 @@ let UsersService = class UsersService {
                 'isOnline',
                 'viewerCount',
                 'likesCount',
+                'liveStartedAt',
+                'liveLikes',
+                'liveCoins',
             ],
         });
     }
@@ -302,7 +305,7 @@ let UsersService = class UsersService {
         await this.redisService.sadd('online_users', id);
         const gender = user.gender?.toLowerCase();
         if (gender) {
-            await this.redisService.sadd(`online:${gender}`, id);
+            await this.redisService.sadd(`online_calls:${gender}`, id);
         }
         await this.userRepo.update(user.id, {
             isOnline: true,
@@ -317,12 +320,8 @@ let UsersService = class UsersService {
         const id = String(user.id);
         const gender = user.gender?.toLowerCase();
         if (gender) {
-            await this.redisService.srem(`online:${gender}`, id);
+            await this.redisService.srem(`online_calls:${gender}`, id);
         }
-        await this.userRepo.update(user.id, {
-            isOnline: false,
-            lastActiveAt: new Date(),
-        });
         console.log(`❌ User Offline for Calls: ${id}`);
     }
 };

@@ -27,6 +27,9 @@ export declare class User {
     isVerified: boolean;
     isOnline: boolean;
     isLive: boolean;
+    liveStartedAt: Date | null;
+    liveLikes: number;
+    liveCoins: number;
     isActive: boolean;
     hostApproved: boolean;
     role: UserRole;

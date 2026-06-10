@@ -76,9 +76,9 @@ let MatchService = class MatchService {
         }
         let users = [...queueUsers];
         if (!users.length) {
-            console.log(`No users in queues: ${oppositeQueues.join(', ')}. Checking online users.`);
+            console.log(`No users in queues: ${oppositeQueues.join(', ')}. Checking online users ready for calls.`);
             for (const tGender of targetGenders) {
-                const oUsers = await this.redisService.smembers(`online:${tGender}`);
+                const oUsers = await this.redisService.smembers(`online_calls:${tGender}`);
                 users = users.concat(oUsers);
             }
         }

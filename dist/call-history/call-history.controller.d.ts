@@ -2,13 +2,7 @@ import { CallHistoryService } from './call-history.service';
 export declare class CallHistoryController {
     private readonly callHistoryService;
     constructor(callHistoryService: CallHistoryService);
-    create(createData: any): Promise<import("mongoose").Document<unknown, {}, import("./call-history.schema").CallHistoryDocument, {}, import("mongoose").DefaultSchemaOptions> & import("./call-history.schema").CallHistory & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
-        _id: import("mongoose").Types.ObjectId;
-    }> & {
-        __v: number;
-    } & {
-        id: string;
-    }>;
+    create(createData: any): Promise<import("./call-history.entity").CallHistory>;
     findByUser(userId: string): Promise<{
         id: string;
         callId: string;
@@ -19,26 +13,14 @@ export declare class CallHistoryController {
         otherUserName: string;
         otherUserImage: string;
         otherUserId: string;
-        roomName: string;
+        roomName: string | undefined;
         callType: string;
         duration: number;
         status: string;
-        startedAt: Date;
-        endedAt: Date;
+        startedAt: Date | undefined;
+        endedAt: Date | undefined;
         createdAt: Date;
     }[]>;
-    findById(id: string): Promise<import("mongoose").Document<unknown, {}, import("./call-history.schema").CallHistoryDocument, {}, import("mongoose").DefaultSchemaOptions> & import("./call-history.schema").CallHistory & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
-        _id: import("mongoose").Types.ObjectId;
-    }> & {
-        __v: number;
-    } & {
-        id: string;
-    }>;
-    endCall(id: string, duration: number, status: string): Promise<import("mongoose").Document<unknown, {}, import("./call-history.schema").CallHistoryDocument, {}, import("mongoose").DefaultSchemaOptions> & import("./call-history.schema").CallHistory & import("mongoose").Document<import("mongoose").Types.ObjectId, any, any, Record<string, any>, {}> & Required<{
-        _id: import("mongoose").Types.ObjectId;
-    }> & {
-        __v: number;
-    } & {
-        id: string;
-    }>;
+    findById(id: string): Promise<import("./call-history.entity").CallHistory>;
+    endCall(id: string, duration: number, status: string): Promise<import("./call-history.entity").CallHistory>;
 }

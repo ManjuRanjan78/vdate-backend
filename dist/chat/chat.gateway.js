@@ -116,9 +116,9 @@ let ChatGateway = class ChatGateway {
             if (!room) {
                 return;
             }
-            await this.chatService.markAsRead(userId, room._id.toString());
+            await this.chatService.markAsRead(userId, room.id);
             const friendId = room.user1Id === userId ? room.user2Id : room.user1Id;
-            const roomId = room._id.toString();
+            const roomId = room.id;
             client.emit('chat_read', { roomId, userId });
             this.server.to(`chat_user_${friendId}`).emit('chat_read', { roomId, userId });
             await this.sendConversationUpdate(userId);
@@ -145,7 +145,7 @@ let ChatGateway = class ChatGateway {
                 return;
             }
             const friendId = room.user1Id === userId ? room.user2Id : room.user1Id;
-            const roomId = room._id.toString();
+            const roomId = room.id;
             this.server.to(`chat_user_${friendId}`).emit('chat_typing_started', {
                 roomId,
                 userId,
@@ -171,7 +171,7 @@ let ChatGateway = class ChatGateway {
                 return;
             }
             const friendId = room.user1Id === userId ? room.user2Id : room.user1Id;
-            const roomId = room._id.toString();
+            const roomId = room.id;
             this.server.to(`chat_user_${friendId}`).emit('chat_typing_stopped', {
                 roomId,
                 userId,

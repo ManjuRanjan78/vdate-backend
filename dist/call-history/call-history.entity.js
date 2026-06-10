@@ -17,6 +17,8 @@ let CallHistory = class CallHistory {
     callerId;
     receiverId;
     roomName;
+    callerName;
+    receiverName;
     callType;
     duration;
     status;
@@ -30,7 +32,7 @@ __decorate([
     __metadata("design:type", String)
 ], CallHistory.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ unique: true }),
+    (0, typeorm_1.Column)({ unique: true, nullable: true }),
     __metadata("design:type", String)
 ], CallHistory.prototype, "callId", void 0);
 __decorate([
@@ -45,6 +47,14 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], CallHistory.prototype, "roomName", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], CallHistory.prototype, "callerName", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], CallHistory.prototype, "receiverName", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: 'VIDEO' }),
     __metadata("design:type", String)

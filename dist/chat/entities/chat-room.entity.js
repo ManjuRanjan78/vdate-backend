@@ -9,10 +9,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ChatRoomSchema = exports.ChatRoom = void 0;
-const mongoose_1 = require("@nestjs/mongoose");
-const mongoose_2 = require("mongoose");
-let ChatRoom = class ChatRoom extends mongoose_2.Document {
+exports.ChatRoom = void 0;
+const typeorm_1 = require("typeorm");
+let ChatRoom = class ChatRoom {
+    id;
     user1Id;
     user2Id;
     lastMessage;
@@ -22,23 +22,36 @@ let ChatRoom = class ChatRoom extends mongoose_2.Document {
 };
 exports.ChatRoom = ChatRoom;
 __decorate([
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
+    __metadata("design:type", String)
+], ChatRoom.prototype, "id", void 0);
+__decorate([
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ type: 'int' }),
     __metadata("design:type", Number)
 ], ChatRoom.prototype, "user1Id", void 0);
 __decorate([
-    (0, mongoose_1.Prop)({ required: true }),
+    (0, typeorm_1.Index)(),
+    (0, typeorm_1.Column)({ type: 'int' }),
     __metadata("design:type", Number)
 ], ChatRoom.prototype, "user2Id", void 0);
 __decorate([
-    (0, mongoose_1.Prop)(),
+    (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], ChatRoom.prototype, "lastMessage", void 0);
 __decorate([
-    (0, mongoose_1.Prop)(),
+    (0, typeorm_1.Column)({ type: 'timestamp with time zone', nullable: true }),
     __metadata("design:type", Date)
 ], ChatRoom.prototype, "lastMessageAt", void 0);
+__decorate([
+    (0, typeorm_1.CreateDateColumn)({ type: 'timestamp with time zone' }),
+    __metadata("design:type", Date)
+], ChatRoom.prototype, "createdAt", void 0);
+__decorate([
+    (0, typeorm_1.UpdateDateColumn)({ type: 'timestamp with time zone' }),
+    __metadata("design:type", Date)
+], ChatRoom.prototype, "updatedAt", void 0);
 exports.ChatRoom = ChatRoom = __decorate([
-    (0, mongoose_1.Schema)({ timestamps: true })
+    (0, typeorm_1.Entity)('chat_rooms')
 ], ChatRoom);
-exports.ChatRoomSchema = mongoose_1.SchemaFactory.createForClass(ChatRoom);
-//# sourceMappingURL=chat-room.schema.js.map
+//# sourceMappingURL=chat-room.entity.js.map
