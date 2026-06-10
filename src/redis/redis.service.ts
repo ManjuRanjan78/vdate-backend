@@ -467,4 +467,26 @@ async clearMatchPair(
     userId2,
   );
 }
+
+// =========================
+// MATCH HISTORY
+// =========================
+
+async addMatchHistory(
+  userId1: string,
+  userId2: string,
+) {
+  // Store match history for 30 minutes (1800 seconds)
+  const ttl = 1800;
+  await this.set(`history:${userId1}:${userId2}`, 'true', ttl);
+  await this.set(`history:${userId2}:${userId1}`, 'true', ttl);
+}
+
+async hasMatchHistory(
+  userId1: string,
+  userId2: string,
+) {
+  const result = await this.get(`history:${userId1}:${userId2}`);
+  return !!result;
+}
 }

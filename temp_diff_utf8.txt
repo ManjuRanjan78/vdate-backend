@@ -1,0 +1,960 @@
+diff --git a/src/socket/socket.gateway.ts b/src/socket/socket.gateway.ts
+index 84f9878..42d218c 100644
+--- a/src/socket/socket.gateway.ts
++++ b/src/socket/socket.gateway.ts
+@@ -66,6 +66,173 @@ constructor(
+   private readonly chatService: ChatService,
+ ) {}
+ 
++  private normalizePreference(value?: string | null): string {
++    if (!value || value.trim() === '') {
++      return 'both';
++    }
++
++    const pref = value.toLowerCase().trim();
++
++    if (pref === 'male') return 'male';
++    if (pref === 'female') return 'female';
++
++    return 'both';
++  }
++
++  private getSearchIntentKey(
++    userId: string,
++  ) {
++    return `searching:${userId}`;
++  }
++
++  private async setSearchIntent(
++    userId: string,
++    searching: boolean,
++  ) {
++    const key = this.getSearchIntentKey(
++      userId,
++    );
++
++    console.log('SEARCH_STATE_CHANGED', {
++      userId,
++      isSearching: searching,
++    });
++
++    if (searching) {
++      await this.redisService.set(
++        key,
++        true,
++        86400,
++      );
++      return;
++    }
++
++    await this.redisService.del(
++      key,
++    );
++  }
++
++  private async isSearchIntentActive(
++    userId: string,
++  ): Promise<boolean> {
++    const value = await this.redisService.get(
++      this.getSearchIntentKey(
++        userId,
++      ),
++    );
++    return !!value;
++  }
++
++  private async getQueueState(
++    userId: string,
++  ): Promise<'waiting' | 'idle'> {
++    const active = await this.redisService.get(
++      `queue:${userId}`,
++    );
++    return active ? 'waiting' : 'idle';
++  }
++
++  private async getSocketForUser(
++    userId: string,
++  ): Promise<Socket | null> {
++    const socketId = await this.redisService.get(
++      `socket:${userId}`,
++    );
++    if (!socketId) {
++      return null;
++    }
++
++    const socket =
++      this.server.sockets.sockets.get(
++        socketId,
++      );
++
++    if (!socket || !socket.connected) {
++      return null;
++    }
++
++    return socket;
++  }
++
++  private async logMatchmakingState(
++    event: string,
++    userId: string,
++    data: object = {},
++  ) {
++    const queueState = await this.getQueueState(
++      userId,
++    );
++    const isSearching = await this.isSearchIntentActive(
++      userId,
++    );
++    const isInCall =
++      !!(await this.redisService.isBusy(
++        userId,
++      )) ||
++      !!(await this.redisService.getMatched(
++        userId,
++      ));
++
++    console.log(
++      event,
++      {
++        userId,
++        queueState,
++        isSearching,
++        isInCall,
++        ...data,
++      },
++    );
++  }
++
++  private async resumeUserSearch(
++    userId: string,
++  ) {
++    const intent = await this.isSearchIntentActive(
++      userId,
++    );
++    if (!intent) {
++      return;
++    }
++
++    const socket = await this.getSocketForUser(
++      userId,
++    );
++    if (!socket) {
++      return;
++    }
++
++    const user = await this.usersService.findById(
++      userId,
++    );
++    if (!user || !user.gender) {
++      return;
++    }
++
++    const preferenceGender =
++      await this.matchService.getQueuePreferenceGender(
++        userId,
++      );
++    const preferenceLocation =
++      (await this.matchService.getQueuePreferenceLocation(
++        userId,
++      )) || '';
++
++    await this.logMatchmakingState(
++      'SEARCH_RESUMED',
++      userId,
++      {
++        preferenceGender,
++        preferenceLocation,
++      },
++    );
++
++    await this.findMatch(socket, {
++      preferenceGender,
++      preferenceLocation,
++    });
++  }
++
+   private async sendFriendRequestPush(
+     toUserId: number,
+     fromUserId: number,
+@@ -230,6 +397,12 @@ if (
+   userId,
+ );
+ 
++      await this.redisService.set(
++        `heartbeat:${userId}`,
++        String(Date.now()),
++        60,
++      );
++
+       console.log(` User Online: ${userId}`);
+ 
+       client.emit('connected', {
+@@ -250,7 +423,7 @@ if (
+   ) {
+     try {
+       const userId = client.handshake.query.userId as string;
+-      console.log('Socket Disconnected:', userId);
++      console.log('SOCKET_DISCONNECT_EVENT', { userId, socketId: client.id });
+ 
+       if (!userId) return;
+ 
+@@ -268,25 +441,15 @@ if (
+       );
+ 
+     // USER RECONNECTED
+-  if (
+-  socketStillExists &&
+-  socketStillExists !== client.id
+-) {
+-
+-  const activeSocket =
+-    this.server.sockets.sockets.get(
+-      socketStillExists,
+-    );
+-
+-  if (activeSocket) {
+-
+-    console.log(
+-      `User reconnected before cleanup: ${userId}`,
+-    );
+-
+-    return;
+-  }
+-}
++    if (
++      socketStillExists &&
++      socketStillExists !== client.id
++    ) {
++      console.log(
++        `User reconnected before cleanup: ${userId}`,
++      );
++      return;
++    }
+ 
+     // =========================
+     // FINAL OFFLINE CLEANUP
+@@ -398,6 +561,10 @@ await this.redisService.clearMatched(
+         'User disconnected',
+     },
+   );
++
++          await this.resumeUserSearch(
++            otherUserId,
++          );
+         }
+       }
+ 
+@@ -704,6 +871,8 @@ async handleRejectFriendRequest(
+       const userId = client.handshake.query.userId as string;
+       if (!userId) return { success: false, message: 'User ID missing' };
+       
++      console.log('EMITTED_go_online_calls_backend', { userId, socketId: client.id });
++
+       await this.usersService.setUserOnlineForCalls(userId);
+       return { success: true };
+     } catch (error) {
+@@ -720,6 +889,8 @@ async handleRejectFriendRequest(
+       const userId = client.handshake.query.userId as string;
+       if (!userId) return { success: false, message: 'User ID missing' };
+ 
++      console.log('EMITTED_go_offline_calls_backend', { userId, socketId: client.id });
++
+       await this.usersService.setUserOfflineForCalls(userId);
+       return { success: true };
+     } catch (error) {
+@@ -728,6 +899,25 @@ async handleRejectFriendRequest(
+     }
+   }
+ 
++  @SubscribeMessage('heartbeat')
++  async handleHeartbeat(
++    @ConnectedSocket() client: Socket,
++  ) {
++    try {
++      const userId = client.handshake.query.userId as string;
++      if (!userId) return { success: false, message: 'User ID missing' };
++
++      await this.redisService.set(
++        `heartbeat:${userId}`,
++        String(Date.now()),
++        60,
++      );
++      return { success: true };
++    } catch (error) {
++      return { success: false, message: 'Heartbeat error' };
++    }
++  }
++
+   // =========================
+   // FIND MATCH
+   // =========================
+@@ -748,6 +938,15 @@ async findMatch(
+         client.handshake.query.userId,
+       );
+ 
++    console.log(
++      'MATCH_START_REQUEST',
++      {
++        userId,
++        preferenceGender: data?.preferenceGender || '',
++        preferenceLocation: data?.preferenceLocation || '',
++      }
++    );
++
+     console.log(
+       `Searching user: ${userId}`,
+     );
+@@ -792,6 +991,18 @@ async findMatch(
+       return;
+     }
+ 
++    console.log(
++      'MATCH_REQUEST_RECEIVED',
++      {
++        currentUserId: userId,
++        currentGender: gender,
++        currentPreference:
++          data?.preferenceGender || '',
++        regionMode:
++          data?.preferenceLocation || '',
++      },
++    );
++
+     // =========================
+     // CHECK BUSY
+     // =========================
+@@ -815,6 +1026,11 @@ async findMatch(
+       return;
+     }
+ 
++    await this.setSearchIntent(
++      userId,
++      true,
++    );
++
+     // =========================
+     // REMOVE OLD QUEUE
+     // =========================
+@@ -832,9 +1048,25 @@ async findMatch(
+     // FIND MATCH
+     // =========================
+ 
+-    const preferenceGender = data?.preferenceGender || '';
++    const preferenceGender = this.normalizePreference(data?.preferenceGender);
+     const preferenceLocation = data?.preferenceLocation || '';
+ 
++    console.log('PREFERENCE_SELECTED', {
++      userId,
++      preferenceGender,
++      preferenceLocation,
++    });
++
++    console.log(
++      'AUDIT_FIND_MATCH_CALLED',
++      {
++        userId,
++        gender,
++        preferenceGender,
++        preferenceLocation,
++      },
++    );
++
+     matchedUserId =
+       await this.matchService.getMatch(
+         userId,
+@@ -844,7 +1076,12 @@ async findMatch(
+       );
+ 
+     console.log(
+-      `Matched User Result: ${matchedUserId}`,
++      'AUDIT_FIND_MATCH_RESULT',
++      {
++        userId,
++        matchedUserId,
++        found: !!matchedUserId,
++      },
+     );
+ 
+     // =========================
+@@ -857,12 +1094,25 @@ async findMatch(
+     ) {
+ 
+       console.log(
+-        `No match found for ${userId}, adding to queue`,
++        'AUDIT_NO_MATCH_ADDING_TO_QUEUE',
++        {
++          userId,
++          gender,
++          preferenceGender,
++          preferenceLocation,
++        },
+       );
+ 
+       await this.matchService.addToQueue(
+         userId,
+         gender,
++        preferenceGender,
++        preferenceLocation,
++      );
++
++      console.log(
++        'QUEUE_JOIN_SUCCESS',
++        { userId, gender },
+       );
+ 
+       await this.redisService.set(
+@@ -871,6 +1121,21 @@ async findMatch(
+         120,
+       );
+ 
++      const queueState = await this.redisService.smembers(gender === 'male' ? 'male_waiting' : 'female_waiting');
++      console.log(
++        'QUEUE_STATE',
++        { userId, gender, queueLength: queueState.length, queueUsers: queueState }
++      );
++
++      await this.logMatchmakingState(
++        'QUEUE_JOINED',
++        userId,
++        {
++          preferenceGender,
++          preferenceLocation,
++        },
++      );
++
+       client.emit(
+         'waiting',
+         {
+@@ -908,6 +1173,33 @@ async findMatch(
+       return this.findMatch(client, data);
+     }
+ 
++    if (
++      !this.matchService.isMatchPreferenceCompatible(
++        gender,
++        preferenceGender,
++        matchedUser.gender,
++        await this.matchService.getQueuePreferenceGender(
++          matchedUserId,
++        ),
++      )
++    ) {
++      console.log(
++        'MATCH_VALIDATION_RESULT',
++        {
++          userId: userId,
++          candidateId: matchedUserId,
++          gender: gender,
++          preference: preferenceGender,
++          isOnline: true,
++          isSearching: true,
++          isInCall: false,
++          regionMode: preferenceLocation,
++          rejectionReason: 'Post-match preference mismatch',
++        },
++      );
++      return this.findMatch(client, data);
++    }
++
+     // =========================
+     // GET MATCHED SOCKET
+     // =========================
+@@ -929,14 +1221,27 @@ async findMatch(
+     // VERIFY SOCKET IS ALIVE
+     // =========================
+ 
+-    const receiverSocket = matchedSocketId ? this.server.sockets.sockets.get(matchedSocketId) : null;
++    const matchedRoomSockets = await this.server.in(`user_${matchedUserId}`).fetchSockets();
++    const hasActiveSockets = matchedRoomSockets && matchedRoomSockets.length > 0;
+ 
+-    if (!matchedSocketId || !receiverSocket || !receiverSocket.connected) {
+-      console.log(`Matched user socket missing or dead: ${matchedUserId}`);
++    const heartbeatTime = await this.redisService.get(`heartbeat:${matchedUserId}`);
++    const hasRecentHeartbeat = !!heartbeatTime;
++
++    console.log('SOCKET_VALIDATION', {
++      userId: matchedUserId,
++      socketId: matchedSocketId,
++      hasActiveSockets,
++      hasRecentHeartbeat,
++      status: (matchedSocketId && hasActiveSockets && hasRecentHeartbeat) ? 'OK' : 'SOCKET_VALIDATION_WARNING',
++    });
++
++    if (!matchedSocketId || !hasActiveSockets || !hasRecentHeartbeat) {
++      console.log(`Matched user socket missing, dead, or inactive: ${matchedUserId}`);
+ 
+       // Clean up stale matched user
+       await this.redisService.del(`socket:${matchedUserId}`);
+       await this.redisService.del(`queue:${matchedUserId}`);
++      await this.redisService.del(`heartbeat:${matchedUserId}`);
+       await this.matchService.removeFromQueue(matchedUserId, 'male');
+       await this.matchService.removeFromQueue(matchedUserId, 'female');
+       await this.redisService.clearMatched(matchedUserId);
+@@ -947,6 +1252,11 @@ async findMatch(
+       return this.findMatch(client, data);
+     }
+ 
++    console.log('MATCH_FOUND', {
++      callerId: userId,
++      receiverId: matchedUserId,
++    });
++
+     // =========================
+     // REMOVE BOTH FROM QUEUE
+     // =========================
+@@ -988,6 +1298,19 @@ async findMatch(
+       userId,
+     );
+ 
++    await this.redisService.addMatchHistory(
++      userId,
++      matchedUserId,
++    );
++
++    console.log(
++      'MATCH_CREATED',
++      {
++        currentUserId: userId,
++        candidateUserId: matchedUserId,
++      },
++    );
++
+     // =========================
+     // SET BUSY
+     // =========================
+@@ -1010,6 +1333,15 @@ async findMatch(
+     const roomName =
+       `room_${sortedIds[0]}_${sortedIds[1]}`;
+ 
++    console.log(
++      'ROOM_CREATION_START',
++      {
++        userId,
++        matchedUserId,
++        roomName,
++      }
++    );
++
+     // =========================
+     // CREATE TOKENS
+     // =========================
+@@ -1026,6 +1358,24 @@ async findMatch(
+         roomName,
+       );
+ 
++    console.log(
++      'ROOM_CREATION_SUCCESS',
++      {
++        userId,
++        matchedUserId,
++        roomName,
++      }
++    );
++
++    console.log(
++      'ROOM_CREATED',
++      {
++        userId,
++        matchedUserId,
++        roomName,
++      }
++    );
++
+     // =========================
+     // CREATE CALL SESSION
+     // =========================
+@@ -1101,31 +1451,78 @@ const receiverPayload = {
+       process.env.LIVEKIT_URL,
+ };
+ 
++console.log(
++  'MATCH_EVENT_SENT',
++  {
++    userId,
++    matchedUserId,
++    roomName,
++  }
++);
++
+ // Emit nearly simultaneously
+ await Promise.all([
+-
+   new Promise((resolve) => {
+-
+-    client.emit(
++    console.log('ROOM_EMIT_MATCH', {
++      userId,
++      room: `user_${userId}`,
++    });
++    this.server.to(`user_${userId}`).emit(
+       'match_found',
+       callerPayload,
+     );
+-
+     resolve(true);
+   }),
+ 
+   new Promise((resolve) => {
+-
+-    receiverSocket.emit(
++    console.log('ROOM_EMIT_MATCH', {
++      userId: matchedUserId,
++      room: `user_${matchedUserId}`,
++    });
++    this.server.to(`user_${matchedUserId}`).emit(
+       'match_found',
+       receiverPayload,
+     );
+-
+     resolve(true);
+   }),
+ ]);
++
++    console.log(
++      'AUDIT_ROOM_CREATED',
++      {
++        currentUserId: userId,
++        candidateUserId: matchedUserId,
++        roomName,
++      },
++    );
++
+     console.log(
+-      `MATCH CREATED: ${userId} ↔ ${matchedUserId}`,
++      'AUDIT_MATCH_CREATED',
++      {
++        currentUserId: userId,
++        candidateUserId: matchedUserId,
++        callId,
++      },
++    );
++
++    console.log(
++      'AUDIT_CALL_STARTED',
++      {
++        currentUserId: userId,
++        candidateUserId: matchedUserId,
++        roomName,
++        callId,
++      },
++    );
++
++    await this.logMatchmakingState(
++      'CALL_STARTED',
++      userId,
++      {
++        matchedUserId,
++        roomName,
++        callId,
++      },
+     );
+ 
+   } catch (error) {
+@@ -1210,14 +1607,11 @@ await Promise.all([
+ 
+       // Check if receiver is online
+       const matchedSocketId = await this.redisService.get(`socket:${matchedUserId}`);
+-      if (!matchedSocketId) {
+-        client.emit('match_error', { success: false, message: 'User is offline' });
+-        return;
+-      }
++      const receiverSocket = matchedSocketId ? this.server.sockets.sockets.get(matchedSocketId) : null;
++      const isReceiverOnline = receiverSocket && receiverSocket.connected;
+ 
+-      const receiverSocket = this.server.sockets.sockets.get(matchedSocketId);
+-      if (!receiverSocket || !receiverSocket.connected) {
+-        client.emit('match_error', { success: false, message: 'User is offline' });
++      if (!isReceiverOnline && !matchedUser.fcmToken) {
++        client.emit('match_error', { success: false, message: 'User is offline and unreachable' });
+         return;
+       }
+ 
+@@ -1290,11 +1684,75 @@ await Promise.all([
+         livekitUrl: process.env.LIVEKIT_URL,
+       };
+ 
+-      // Emit nearly simultaneously
++      // Emit to caller
+       client.emit('match_found', callerPayload);
+-      receiverSocket.emit('match_found', receiverPayload);
++      
++      // Emit to receiver if online
++      if (isReceiverOnline) {
++        receiverSocket.emit('match_found', receiverPayload);
++      }
++
++      // Send Push Notification
++      if (matchedUser.fcmToken) {
++        await this.firebaseService.sendNotification(
++          matchedUser.fcmToken,
++          'Incoming Video Call',
++          `${currentUser.name || 'Someone'} is calling you`,
++          {
++            type: 'incoming_call',
++            callId: String(callId),
++            callerId: String(currentUser.id),
++            callerName: currentUser.name || 'Someone',
++            roomName: roomName,
++            token: receiverToken,
++            livekitUrl: process.env.LIVEKIT_URL || '',
++            timestamp: String(Date.now()),
++            callerAvatar: currentUser.imageUrl || '',
++            callerGender: currentUser.gender || '',
++          },
++        );
++      }
+ 
+       console.log(`Direct Call established: ${userId} ↔ ${matchedUserId}`);
++
++      // Auto terminate if not answered in 45s
++      setTimeout(async () => {
++        try {
++          const callData = await this.redisService.get(`call:${callId}`);
++          if (callData && callData.status === 'started') {
++            console.log(`Call ${callId} timed out after 45s. Marking as missed.`);
++            await this.callsService.updateCallStatus(callId, 'MISSED');
++            
++            await this.redisService.removeBusy(userId);
++            if (matchedUserId) {
++              await this.redisService.removeBusy(matchedUserId);
++            }
++            await this.redisService.clearMatched(userId);
++            if (matchedUserId) {
++              await this.redisService.clearMatched(matchedUserId);
++            }
++            
++            this.server.to(`user_${userId}`).emit('call_ended', { reason: 'No answer' });
++            
++            if (matchedUser.fcmToken) {
++              await this.firebaseService.sendNotification(
++                matchedUser.fcmToken,
++                'Missed Video Call',
++                `You missed a call from ${currentUser.name || 'Someone'}`,
++                {
++                  type: 'missed_call',
++                  callerId: String(userId),
++                  callerName: currentUser.name || 'Someone',
++                  timestamp: String(Date.now()),
++                },
++              );
++            }
++          }
++        } catch (e) {
++          console.error('Error in call timeout:', e);
++        }
++      }, 45000);
++
+     } catch (error) {
+       console.log('Direct Call error:', error);
+       if (userId) {
+@@ -1383,7 +1841,8 @@ async handleCallConnected(
+     }
+ 
+     console.log(
+-      `CALL CONNECTED: ${roomName}`,
++      'CALL_CONNECTED',
++      { roomName, userId, matchedUserId }
+     );
+ 
+     this.startCoinDeduction(
+@@ -1401,6 +1860,35 @@ async handleCallConnected(
+   }
+ }
+ 
++  // =========================
++  // REJECT CALL
++  // =========================
++  @SubscribeMessage('reject_call')
++  async handleRejectCall(
++    @ConnectedSocket() client: Socket,
++    @MessageBody() data: any,
++  ) {
++    try {
++      const { callId, userId, matchedUserId } = data;
++      
++      if (callId) {
++        await this.callsService.updateCallStatus(callId, 'REJECTED');
++      }
++
++      await this.redisService.removeBusy(userId);
++      await this.redisService.removeBusy(matchedUserId);
++      await this.redisService.clearMatched(userId);
++      await this.redisService.clearMatched(matchedUserId);
++
++      this.server.to(`user_${matchedUserId}`).emit('call_rejected', {
++        reason: 'Call declined',
++      });
++      console.log(`Call rejected by ${userId} for ${matchedUserId}`);
++    } catch (e) {
++      console.log('Error forwarding reject_call:', e);
++    }
++  }
++
+   // =========================
+   // ACCEPT CALL
+   // =========================
+@@ -1410,7 +1898,10 @@ async handleCallConnected(
+     @MessageBody() data: any,
+   ) {
+     try {
+-      const { matchedUserId } = data;
++      const { callId, matchedUserId } = data;
++      if (callId) {
++        await this.callsService.updateCallStatus(callId, 'ACCEPTED');
++      }
+       this.server.to(`user_${matchedUserId}`).emit('accept_call', data);
+       console.log(`Forwarded accept_call to user_${matchedUserId}`);
+     } catch (e) {
+@@ -1426,7 +1917,15 @@ async handleCallConnected(
+     @MessageBody() data: any,
+   ) {
+     try {
+-      const { userId, matchedUserId } = data;
++      const { callId, userId, matchedUserId } = data;
++      const resumeIntent = data?.intent === 'resume';
++
++      if (!resumeIntent) {
++        await this.setSearchIntent(
++          userId,
++          false,
++        );
++      }
+ 
+   await this.redisService.removeBusy(
+   userId,
+@@ -1452,6 +1951,25 @@ await this.redisService.del(
+ await this.redisService.del(
+   `queue:${matchedUserId}`,
+ );
++
++await this.logMatchmakingState(
++  'CALL_ENDED',
++  userId,
++  {
++    matchedUserId,
++    intent: resumeIntent ? 'resume' : 'stop',
++  },
++);
++
++if (resumeIntent) {
++  await this.resumeUserSearch(userId);
++}
++
++if (matchedUserId) {
++  await this.resumeUserSearch(
++    matchedUserId,
++  );
++}
+ // =========================
+ // NOTIFY OTHER USER
+ // =========================
+@@ -1472,6 +1990,40 @@ this.server
+ const roomName =
+   `room_${sortedIds[0]}_${sortedIds[1]}`;
+ 
++// Check if call was ever connected by checking if timer exists
++const callWasConnected = this.activeCallTimers.has(roomName);
++
++if (!callWasConnected) {
++  try {
++    if (callId) {
++      await this.callsService.updateCallStatus(callId, 'MISSED');
++    }
++    const matchedUser = await this.usersService.findById(matchedUserId);
++    const caller = await this.usersService.findById(userId);
++    if (matchedUser && matchedUser.fcmToken) {
++      await this.firebaseService.sendNotification(
++        matchedUser.fcmToken,
++        'Missed Video Call',
++        `You missed a call from ${caller?.name || 'Someone'}`,
++        {
++          type: 'missed_call',
++          callerId: String(userId),
++          callerName: caller?.name || 'Someone',
++          timestamp: String(Date.now()),
++        },
++      );
++    }
++  } catch (error) {
++    console.error('Missed call notification error:', error);
++  }
++} else {
++  if (callId) {
++    try {
++      await this.callsService.endVideoCall(callId);
++    } catch(e) {}
++  }
++}
++
+   console.log(
+   '=========================',
+ );
+@@ -1592,6 +2144,31 @@ this.server
+         'Insufficient coins',
+     },
+   );
++
++    await this.logMatchmakingState(
++      'CALL_ENDED',
++      userId1,
++      {
++        matchedUserId: userId2,
++        reason: 'Insufficient coins',
++      },
++    );
++
++    await this.logMatchmakingState(
++      'CALL_ENDED',
++      userId2,
++      {
++        matchedUserId: userId1,
++        reason: 'Insufficient coins',
++      },
++    );
++
++    await this.resumeUserSearch(
++      userId1,
++    );
++    await this.resumeUserSearch(
++      userId2,
++    );
+   }
+ 
+   @SubscribeMessage('leave_queue')
+@@ -1623,6 +2200,11 @@ async handleLeaveQueue(
+       user.gender,
+     );
+ 
++    await this.setSearchIntent(
++      userId,
++      false,
++    );
++
+     await this.redisService.del(
+   `queue:${userId}`,
+ );
+@@ -1630,19 +2212,15 @@ async handleLeaveQueue(
+       `User removed from queue: ${userId}`,
+     );
+ 
+-  } catch (error) {
+-
+-    console.log(
+-      'Leave Queue Error:',
+-      error,
++    await this.logMatchmakingState(
++      'QUEUE_REMOVED',
++      userId,
+     );
++  } catch (error) {
++    console.log('Leave Queue Error:', error);
+   }
+ }
+ 
+-  // =========================
+-  // LIVE STREAMING
+-  // =========================
+-
+   @SubscribeMessage('host_start_live')
+   async handleHostStartLive(
+     @ConnectedSocket() client: Socket,

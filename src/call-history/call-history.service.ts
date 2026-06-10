@@ -16,6 +16,7 @@ export class CallHistoryService {
   async createCallRecord(data: any) {
     try {
       const record = this.callHistoryRepo.create({
+        callId: data.callId,
         callerId: Number(data.callerId),
         receiverId: Number(data.receiverId),
         roomName: data.roomName || '',
@@ -31,6 +32,21 @@ export class CallHistoryService {
       return savedRecord;
     } catch (error) {
       console.error('Error creating call record:', error);
+      throw error;
+    }
+  }
+
+  async updateCallStatus(callId: string, status: string) {
+    try {
+      const record = await this.callHistoryRepo.findOne({ where: { callId } });
+      if (!record) return null;
+      record.status = status;
+      if (status === 'MISSED' || status === 'REJECTED' || status === 'COMPLETED') {
+        record.endedAt = new Date();
+      }
+      return await this.callHistoryRepo.save(record);
+    } catch (error) {
+      console.error('Error updating call status:', error);
       throw error;
     }
   }

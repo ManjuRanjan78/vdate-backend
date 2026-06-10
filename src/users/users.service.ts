@@ -324,6 +324,11 @@ export class UsersService {
     console.log(
       `✅ User Online: ${id}`,
     );
+
+    console.log('ONLINE_STATE_CHANGED', {
+      userId: id,
+      isOnline: true,
+    });
   }
 
   // =========================
@@ -362,6 +367,11 @@ export class UsersService {
         'online:male',
         id,
       );
+
+      await this.redisService.srem(
+        'online_calls:male',
+        id,
+      );
     }
 
     if (
@@ -371,6 +381,11 @@ export class UsersService {
 
       await this.redisService.srem(
         'online:female',
+        id,
+      );
+
+      await this.redisService.srem(
+        'online_calls:female',
         id,
       );
     }
@@ -388,6 +403,11 @@ export class UsersService {
     console.log(
       `❌ User Offline: ${id}`,
     );
+
+    console.log('ONLINE_STATE_CHANGED', {
+      userId: id,
+      isOnline: false,
+    });
   }
 
   // =========================
@@ -686,6 +706,10 @@ export class UsersService {
       lastActiveAt: new Date(),
     });
     console.log(`✅ User Online for Calls: ${id}`);
+    console.log('ONLINE_STATE_CHANGED', {
+      userId: id,
+      isOnline: true,
+    });
   }
 
   // =========================
@@ -704,5 +728,9 @@ export class UsersService {
     // Notice we do NOT set isOnline: false in the DB here,
     // because they might still be online for chat/swiping.
     console.log(`❌ User Offline for Calls: ${id}`);
+    console.log('ONLINE_STATE_CHANGED', {
+      userId: id,
+      isOnline: false,
+    });
   }
 }

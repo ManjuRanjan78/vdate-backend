@@ -240,13 +240,14 @@ export class CallsService {
       const receiverData = receiver.name || `User ${receiverId}`;
       
       await this.callHistoryService.createCallRecord({
+        callId,
         callerId: currentUserId,
         receiverId,
         roomName: receiverData,
         callerName: callerData,
         receiverName: receiverData,
         callType: 'VIDEO',
-        status: 'STARTED',
+        status: 'INITIATED',
         startedAt: new Date(),
       });
     } catch (error) {
@@ -267,6 +268,19 @@ export class CallsService {
       message:
         'Call started successfully',
     };
+  }
+
+  // =========================
+  // UPDATE CALL STATUS
+  // =========================
+
+  async updateCallStatus(callId: string, status: string) {
+    const call = await this.redisService.get(`call:${callId}`);
+    if (call) {
+      call.status = status;
+      await this.redisService.set(`call:${callId}`, call, 7200);
+    }
+    await this.callHistoryService.updateCallStatus(callId, status);
   }
 
   // =========================
