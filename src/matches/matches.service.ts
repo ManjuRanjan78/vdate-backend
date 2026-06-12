@@ -67,29 +67,34 @@ export class MatchService {
         preferenceGender,
       );
 
+    let targetGenders: string[];
+
     if (normalizedPreference === 'female') {
-      return ['female'];
+      targetGenders = ['female'];
+    } else if (normalizedPreference === 'male') {
+      targetGenders = ['male'];
+    } else if (normalizedPreference === 'everyone') {
+      targetGenders = ['male', 'female'];
+    } else {
+      const defaultTarget =
+        normalizedGender === 'male'
+          ? 'female'
+          : 'male';
+      targetGenders = [defaultTarget];
     }
 
-    if (normalizedPreference === 'male') {
-      return ['male'];
-    }
+    console.log('MATCH_PREF_RESOLVED', {
+      userGender: normalizedGender,
+      preferenceGender,
+      normalizedPreference,
+      targetGenders,
+    });
 
-    const defaultTarget =
-      normalizedGender === 'male'
-        ? 'female'
-        : 'male';
+    console.log('TARGET_GENDERS_RESOLVED', {
+      targetGenders,
+    });
 
-    console.log(
-      'DEFAULT_PREFERENCE_APPLIED',
-      {
-        userGender: normalizedGender,
-        preferenceGender,
-        targetGenders: [defaultTarget],
-      },
-    );
-
-    return [defaultTarget];
+    return targetGenders;
   }
 
   isMatchPreferenceCompatible(
@@ -493,7 +498,7 @@ export class MatchService {
     // =========================
 
     console.log(
-      'CANDIDATE_QUERY_START',
+      'QUEUE_SELECTION',
       {
         currentUserId,
         gender,
@@ -632,7 +637,7 @@ export class MatchService {
         userId === currentUserId
       ) {
         console.log(
-          'MATCH_VALIDATION_RESULT',
+          'CANDIDATE_REJECT_REASON',
           {
             userId: currentUserId,
             candidateId: userId,
@@ -660,7 +665,7 @@ export class MatchService {
       if (busy) {
 
         console.log(
-          'MATCH_VALIDATION_RESULT',
+          'CANDIDATE_REJECT_REASON',
           {
             userId: currentUserId,
             candidateId: userId,
@@ -689,7 +694,7 @@ export class MatchService {
       if (matched) {
 
         console.log(
-          'MATCH_VALIDATION_RESULT',
+          'CANDIDATE_REJECT_REASON',
           {
             userId: currentUserId,
             candidateId: userId,
@@ -744,7 +749,7 @@ export class MatchService {
       }
 
       // =========================
-      // CHECK SOCKET
+      // CHECK SOCKET & HEARTBEAT
       // =========================
 
       const socketId =
@@ -752,10 +757,15 @@ export class MatchService {
           `socket:${userId}`,
         );
 
-      if (!socketId) {
+      const heartbeat =
+        await this.redisService.get(
+          `heartbeat:${userId}`,
+        );
+
+      if (!socketId || !heartbeat) {
 
         console.log(
-          'MATCH_VALIDATION_RESULT',
+          'CANDIDATE_REJECT_REASON',
           {
             userId: currentUserId,
             candidateId: userId,
@@ -791,7 +801,7 @@ export class MatchService {
 
       if (!candidate || !candidate.gender) {
         console.log(
-          'MATCH_VALIDATION_RESULT',
+          'CANDIDATE_REJECT_REASON',
           {
             userId: currentUserId,
             candidateId: userId,
@@ -824,6 +834,8 @@ export class MatchService {
           .toLowerCase()
           .trim();
 
+      console.log('CANDIDATE_GENDER', { candidateId: userId, candidateGender });
+
       const candidatePreference =
         await this.getQueuePreferenceGender(
           userId,
@@ -850,7 +862,7 @@ export class MatchService {
         )
       ) {
         console.log(
-          'MATCH_VALIDATION_RESULT',
+          'CANDIDATE_REJECT_REASON',
           {
             userId: currentUserId,
             candidateId: userId,
@@ -885,7 +897,7 @@ export class MatchService {
               .trim()
         ) {
           console.log(
-            'MATCH_VALIDATION_RESULT',
+            'CANDIDATE_REJECT_REASON',
             {
               userId: currentUserId,
               candidateId: userId,

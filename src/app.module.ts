@@ -23,8 +23,6 @@ import { FirebaseModule } from './firebase/firebase.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PaymentsModule } from './payments/payments.module';
 import { CallHistoryModule } from './call-history/call-history.module';
-import { PostsModule } from './posts/posts.module';
-import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -33,7 +31,7 @@ import { ReportsModule } from './reports/reports.module';
       host: 'localhost',
       port: 5432,
       username: 'postgres',
-      password: 'Najnar@420',
+      password: 'Ran2296@Admin',
       database: 'dating_app',
       autoLoadEntities: true,
       // Use migrations in staging/production. Disable synchronize for safety.
@@ -61,8 +59,6 @@ import { ReportsModule } from './reports/reports.module';
     NotificationsModule,
     PaymentsModule,
     CallHistoryModule,
-    PostsModule,
-    ReportsModule,
   ],
 })
 export class AppModule implements NestModule {

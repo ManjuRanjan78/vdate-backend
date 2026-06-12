@@ -528,9 +528,6 @@ export class UsersService {
         'isOnline',
         'viewerCount',
         'likesCount',
-        'liveStartedAt',
-        'liveLikes',
-        'liveCoins',
       ],
     });
   }

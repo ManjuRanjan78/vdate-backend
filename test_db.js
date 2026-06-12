@@ -5,7 +5,7 @@ async function test() {
     user: 'postgres',
     host: 'localhost',
     database: 'dating_app',
-    password: 'Najnar@420',
+    password: 'Ran2296@Admin',
     port: 5432,
   });
 

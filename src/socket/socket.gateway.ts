@@ -430,6 +430,8 @@ if (
       const user = await this.usersService.findById(userId);
       if (!user) return;
 
+      // Immediately invalidate heartbeat to prevent matchmaking
+      await this.redisService.del(`heartbeat:${userId}`);
 
     setTimeout(async () => {
 
@@ -485,13 +487,7 @@ if (
     // =========================
     if (user.isLive) {
       console.log(`Broadcaster ${userId} offline. Ending live stream.`);
-      await this.usersService.updateUser(userId, {
-        isLive: false,
-        viewerCount: 0,
-        liveStartedAt: null,
-        liveLikes: 0,
-        liveCoins: 0,
-      });
+      await this.usersService.updateUser(userId, { isLive: false, viewerCount: 0 });
       this.server.to(`live_${userId}`).emit('live_ended', { hostId: userId });
       this.server.emit('live_rooms_updated');
     }
@@ -1080,6 +1076,91 @@ async findMatch(
         preferenceGender,
         preferenceLocation,
       );
+    // =========================
+    // NEW MATCHMAKING LOGIC
+    // =========================
+    const maleQueue = await this.redisService.smembers('male_waiting');
+    const femaleQueue = await this.redisService.smembers('female_waiting');
+    const onlineMale = await this.redisService.smembers('online_calls:male');
+    const onlineFemale = await this.redisService.smembers('online_calls:female');
+
+    let candidates = [...new Set([...maleQueue, ...femaleQueue, ...onlineMale, ...onlineFemale])];
+    
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+    }
+
+    let currentUserCity: string | null = null;
+    if (preferenceLocation?.toLowerCase() === 'nearby') {
+      currentUserCity = currentUser?.city || null;
+    }
+
+    for (const candidateId of candidates) {
+      if (candidateId === userId) continue;
+
+      const busy = await this.redisService.isBusy(candidateId);
+      if (busy) continue;
+
+      const matched = await this.redisService.getMatched(candidateId);
+      if (matched) continue;
+
+      const matching = await this.redisService.get(`matching:${candidateId}`);
+      if (matching) continue;
+
+      const hasHistory = await this.redisService.hasMatchHistory(userId, candidateId);
+      if (hasHistory) continue;
+
+      const socketId = await this.redisService.get(`socket:${candidateId}`);
+      if (!socketId) {
+        await this.redisService.srem('male_waiting', candidateId);
+        await this.redisService.srem('female_waiting', candidateId);
+        await this.redisService.del(`queue:${candidateId}`);
+        continue;
+      }
+
+      const candidate = await this.usersService.findById(candidateId);
+      if (!candidate || !candidate.gender) {
+        await this.redisService.srem('male_waiting', candidateId);
+        await this.redisService.srem('female_waiting', candidateId);
+        await this.redisService.del(`queue:${candidateId}`);
+        continue;
+      }
+
+      const candidateGender = candidate.gender.toLowerCase().trim();
+      let candidatePref = await this.matchService.getQueuePreferenceGender(candidateId);
+      candidatePref = this.normalizePreference(candidatePref);
+
+      const aPrefersB = preferenceGender === 'both' || preferenceGender === candidateGender;
+      const bPrefersA = candidatePref === 'both' || candidatePref === gender;
+      const isCompatible = aPrefersB && bPrefersA;
+
+      console.log(`[Matchmaking]\nCurrentUser:\ngender=${gender}\npreference=${preferenceGender}\n\nCandidate:\ngender=${candidateGender}\npreference=${candidatePref}\n\nCompatible=${isCompatible}\n\nReason=${isCompatible ? 'Preferences match' : 'Preference mismatch'}`);
+
+      if (!isCompatible) continue;
+
+      if (preferenceLocation?.toLowerCase() === 'nearby' && currentUserCity) {
+        if (!candidate.city || candidate.city.toLowerCase().trim() !== currentUserCity.toLowerCase().trim()) {
+          continue;
+        }
+      }
+
+      if (maleQueue.includes(candidateId) || femaleQueue.includes(candidateId)) {
+        const queueAlive = await this.redisService.get(`queue:${candidateId}`);
+        if (!queueAlive) {
+          await this.redisService.srem('male_waiting', candidateId);
+          await this.redisService.srem('female_waiting', candidateId);
+          continue;
+        }
+      }
+
+      await this.redisService.set(`queue:${candidateId}`, 'true', 60);
+      await this.redisService.set(`matching:${candidateId}`, 'true', 15);
+      await this.redisService.set(`matching:${userId}`, 'true', 15);
+
+      matchedUserId = candidateId;
+      break;
+    }
 
     console.log(
       'AUDIT_FIND_MATCH_RESULT',
@@ -2239,9 +2320,6 @@ async handleLeaveQueue(
       await this.usersService.updateUser(hostId, {
         isLive: true,
         viewerCount: 0,
-        liveStartedAt: new Date(),
-        liveLikes: 0,
-        liveCoins: 0,
       });
 
       client.join(`live_${hostId}`);
@@ -2276,9 +2354,6 @@ async handleLeaveQueue(
       await this.usersService.updateUser(hostId, {
         isLive: false,
         viewerCount: 0,
-        liveStartedAt: null,
-        liveLikes: 0,
-        liveCoins: 0,
       });
 
       const roomName = `live_${hostId}`;
@@ -2339,9 +2414,6 @@ async handleLeaveQueue(
         success: true,
         token,
         livekitUrl: process.env.LIVEKIT_URL,
-        liveStartedAt: host?.liveStartedAt,
-        liveLikes: host?.liveLikes || 0,
-        liveCoins: host?.liveCoins || 0,
       };
     } catch (e: any) {
       console.error('Join live error:', e);
@@ -2413,12 +2485,6 @@ async handleLeaveQueue(
       const { hostId, userId } = data;
       const roomName = `live_${hostId}`;
 
-      const host = await this.usersService.findById(hostId);
-      if (host) {
-        const newLikes = (host.liveLikes || 0) + 1;
-        await this.usersService.updateUser(hostId, { liveLikes: newLikes });
-      }
-
       this.server.to(roomName).emit('live_like_received', {
         userId,
       });
@@ -2453,13 +2519,6 @@ async handleLeaveQueue(
       // Perform transfer
       const senderNewCoins = await this.usersService.updateCoins(fromUserId, -giftCoins);
       const receiverNewCoins = await this.usersService.updateCoins(hostId, giftCoins);
-
-      // Increment liveCoins of host
-      const host = await this.usersService.findById(hostId);
-      if (host) {
-        const newLiveCoins = (host.liveCoins || 0) + giftCoins;
-        await this.usersService.updateUser(hostId, { liveCoins: newLiveCoins });
-      }
 
       // Notify room of gift
       this.server.to(roomName).emit('live_gift_received', {

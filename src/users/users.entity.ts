@@ -153,22 +153,6 @@ export class User {
   isLive!: boolean;
 
   @Column({
-    type: 'timestamp',
-    nullable: true,
-  })
-  liveStartedAt!: Date | null;
-
-  @Column({
-    default: 0,
-  })
-  liveLikes!: number;
-
-  @Column({
-    default: 0,
-  })
-  liveCoins!: number;
-
-  @Column({
     default: true,
   })
   isActive!: boolean;
